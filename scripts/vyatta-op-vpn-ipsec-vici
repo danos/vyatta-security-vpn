@@ -478,7 +478,7 @@ NAT Dest Port:\t\t{natdst}
 
         bytes_in  = conv_bytes(bytes_in, dp_spi_in.get('bytes'))
         bytes_out = conv_bytes(bytes_out, dp_spi_out.get('bytes'))
-        bytesp    = '{}/{}'.format(bytes_in, bytes_out)
+        bytesp    = '{}/{}'.format(bytes_out, bytes_in)
 
         if state == 'up':
             if dp_spi_in.get('blocked') or dp_spi_out.get('blocked'):
