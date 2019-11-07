@@ -1,0 +1,2 @@
+vyatta-security-vpn any binary: file-in-unusual-dir
+vyatta-security-vpn any binary: dir-or-file-in-opt

@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+    configure)
+        deb-systemd-helper disable strongswan.service
+        mkdir -p /etc/systemd/system/strongswan.service.d
+    ;;
+
+    triggered)
+        deb-systemd-helper disable strongswan.service
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0
+
+# Local Variables:
+# mode: shell-script
+# sh-indentation: 4
+# End:

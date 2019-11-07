@@ -1,0 +1,3 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: exec "test -f $VAR(@)" ; "RSA key file '$VAR(@)': No such file"
+commit:expression: exec "test -r $VAR(@)" ; "RSA key file '$VAR(@)': Permission denied"

@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: exec "test $VAR(@) == sha1_160 && echo 'Warning: sha1_160 is no longer supported.' || true";""

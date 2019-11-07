@@ -1,0 +1,245 @@
+#!/usr/bin/python3
+# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# All Rights Reserved.
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+import os
+import sys
+import signal
+import time
+import getopt
+import pprint
+import json
+
+from collections import OrderedDict
+from vyatta import configd
+
+DEBUG = False
+FORCE = False
+PP = None
+CONFIG_CANDIDATE = configd.Client.CANDIDATE
+CONFIG_RUNNING = configd.Client.RUNNING
+
+IKE_CFGPATH = 'security vpn ike'
+X509_CFGPATH = 'security vpn x509'
+
+CFGFILE = '/etc/strongswan.d/charon-vyatta.conf'
+PIDFILE = '/var/run/charon.pid'
+
+PLUGINS_DEFAULT = {
+  'stroke': { 'allow_swap': 'no' }, # avoid unintended src/dst addr/end swaps on ptp devices
+  'kernel-netlink': { 'dump_all_routes': 'no' },
+  'revocation': { 'load': 'yes', 'enable_crl': 'yes', 'enable_ocsp': 'yes' },
+  'curl': { 'load': 'no' }, # use ext-fetcher instead
+  'ext-fetcher': { 'load': 'yes', 'script': '/usr/lib/ipsec/vyatta-ext-fetcher' }, # use ext-fetcher for VRF awareness
+  'ccm': { 'load': 'no' },
+  'cmac': { 'load': 'no' },
+  'ctr': { 'load': 'no' },
+  'dhcp': { 'load': 'no' },
+  'farp': { 'load': 'no' },
+  'gcrypt': { 'load': 'no' },
+  'ldap': { 'load': 'no' },
+  'pkcs11': { 'load': 'no' },
+  'test-vectors': { 'load': 'no' },
+}
+
+CHARON_DEFAULT = {
+  # config change impacting only new IKE SAs
+  'max_ikev1_exchanges': 32,
+  'retransmit_base': 1.8,
+  'retransmit_tries' : 5,
+  'retransmit_timeout': 4.0,
+   # config change requires charon restart
+  'cache_crls': 'no',
+  'make_before_break': 'no',
+  'threads': 16,
+  'cookie_threshold': 10,
+  'block_threshold': 5,
+  'half_open_timeout': 30,
+  'ikesa_limit': 0,
+  'ikesa_table_segments': 0,
+  'ikesa_table_size': 1,
+  'init_limit_half_open': 0,
+  'use_interfaces': '',
+}
+
+def dbg(msg):
+    global PP
+    if not DEBUG:
+        return
+    if PP is None:
+        PP = pprint.PrettyPrinter(indent=2)
+    PP.pprint(msg)
+
+def err(msg):
+    print(msg, file=sys.stderr)
+
+def process_options():
+    global DEBUG, FORCE
+    try:
+        opts, rest = getopt.getopt(sys.argv[1:], "fd", ['force', 'debug'])
+    except getopt.GetoptError as r:
+        err(r)
+        err("usage: {} [-f|--force] [-d|--debug]".format(sys.argv[0]))
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ('-f', '--force'):
+            FORCE = True
+        elif opt in ('-d', '--debug'):
+           DEBUG = True
+
+
+def dump_dict(d, indent=0):
+    ret = ""
+    for k, v in sorted(d.items()):
+        if isinstance(v, dict):
+           ret = ret + "{}{} {{\n".format(" "*indent, k)
+           ret = ret + dump_dict(v, indent+4)
+           ret = ret + "{}}}\n".format(" "*indent)
+        else:
+           ret = ret + "{}{} = {}\n".format(" "*indent, k, v)
+
+    return ret
+
+def generate_global_cfg(ike_cfg, x509_cfg):
+    cfg_header = "# Auto generated vpn-config-global-ike\n"
+
+    cfg_root = {}
+    cfg_plugins = PLUGINS_DEFAULT
+    cfg_charon = CHARON_DEFAULT
+
+    # ike CLI hierachy
+    if ike_cfg:
+        for k in ike_cfg:
+            if k in ('retransmit'):
+                for v in ike_cfg[k]:
+                    cfg_key = '{}_{}'.format(k, v)
+                    cfg_value = ike_cfg[k][v]
+                    cfg_charon[cfg_key] = cfg_value
+            elif k in ('make-before-break'):
+                cfg_key = k.replace('-', '_')
+                cfg_value = 'yes'
+                cfg_charon[cfg_key] = cfg_value
+            elif k in ('interface'):
+                cfg_value = ",".join(ike_cfg[k])
+                cfg_charon['interfaces_use'] = cfg_value
+            elif k in ('block-threshold', 'cookie-threshold', 'worker-threads', 'half-open-timeout',
+                       'ikesa-limit', 'ikesa-table-segments', 'ikesa-table-size',
+                       'init-limit-half-open'):
+                cfg_value = ike_cfg[k]
+                if k == 'worker-threads':
+                    k = 'threads'
+                cfg_key = k.replace('-', '_')
+                cfg_charon[cfg_key] = cfg_value
+            elif k in ('duplicate-check'):
+                cfg_plugins['duplicheck']['enable'] = 'yes'
+            elif k in ('v1'):
+                for v in ike_cfg[k]:
+                    cfg_key = v
+                    cfg_value = ike_cfg[k][v]
+                    cfg_charon[cfg_key] = cfg_value
+
+    # x509 CLI hiearchy
+    if x509_cfg:
+        for k in x509_cfg:
+            if k in ('status'):
+                for v in x509_cfg[k]:
+                    if v == 'interface':
+                       intf = x509_cfg[k][v]
+                       cfg_plugins['revocation']['interface'] = intf
+
+                    elif v in ('crl', 'ocsp'):
+                       if 'disable' in x509_cfg[k][v]:
+                          cfg_key = 'enable_{}'.format(v)
+                          cfg_plugins['revocation'][cfg_key] = 'no'
+                       if 'cache' in x509_cfg[k][v]:
+                           cfg_charon['cache_crls'] = 'yes'
+
+
+    # Assemble configuration file
+    cfg_charon['plugins'] = cfg_plugins
+    cfg_root['charon'] = cfg_charon
+
+    cfg_str = cfg_header + dump_dict(cfg_root)
+    dbg(cfg_str)
+
+    try:
+        with open(CFGFILE, mode='w', encoding='utf-8') as f:
+            f.write(cfg_str)
+    except EnvironmentError as e:
+        err("can't write global IKE configuration: {}".format(e))
+        sys.exit(1)
+
+def process_config():
+    if not os.path.exists('/opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/global-ike-configuration'):
+        return None, None
+
+    try:
+        client = configd.Client()
+    except configd.FatalException as f:
+        err("can't connect to configd: {}".format(f))
+        sys.exit(1)
+
+    x509_cli_unchanged = True
+    ike_cli_unchanged = True
+
+    if client.node_exists(CONFIG_RUNNING, X509_CFGPATH) and client.node_get_status(CONFIG_CANDIDATE, X509_CFGPATH) != client.UNCHANGED:
+        x509_cli_unchanged = False
+    elif client.node_exists(CONFIG_CANDIDATE, X509_CFGPATH) and client.node_get_status(CONFIG_CANDIDATE, X509_CFGPATH) != client.UNCHANGED:
+        x509_cli_unchanged = False
+
+
+    if client.node_exists(CONFIG_RUNNING, IKE_CFGPATH) and client.node_get_status(CONFIG_CANDIDATE, IKE_CFGPATH) != client.UNCHANGED:
+        ike_cli_unchanged = False
+    elif client.node_exists(CONFIG_CANDIDATE, IKE_CFGPATH) and client.node_get_status(CONFIG_CANDIDATE, IKE_CFGPATH) != client.UNCHANGED:
+        ike_cli_unchanged = False
+
+    if ike_cli_unchanged is False:
+        print('Changes in \'security vpn ike\' require \'restart vpn\' to take effect.')
+
+    if x509_cli_unchanged and ike_cli_unchanged and not FORCE:
+        sys.exit(0)
+
+    try:
+        top = client.tree_get_full_dict(IKE_CFGPATH, CONFIG_CANDIDATE, "json")
+        ike_cfg = top.get('ike')
+    except configd.Exception:
+        ike_cfg = None
+
+    try:
+        top = client.tree_get_full_dict(X509_CFGPATH, CONFIG_CANDIDATE, "json")
+        x509_cfg = top.get('x509')
+    except configd.Exception:
+        x509_cfg = None
+
+    return ike_cfg, x509_cfg
+
+# Main
+# unload all connections not part of the config.
+# load all connections.
+
+def vpn_main():
+
+    process_options()
+    ike_cfg, x509_cfg = process_config()
+
+    generate_global_cfg(ike_cfg, x509_cfg)
+
+    try:
+        with open(PIDFILE, mode='r', encoding='utf-8') as f:
+            pid = int(f.read().strip())
+    except EnvironmentError as e:
+        # No PID, no daemon.
+        sys.exit(0)
+
+    try:
+        os.kill(pid, signal.SIGHUP)
+    except OSError as e:
+        err("can't signal IKE daemon for reload: {}".format(e))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    vpn_main()
+    exit(0)

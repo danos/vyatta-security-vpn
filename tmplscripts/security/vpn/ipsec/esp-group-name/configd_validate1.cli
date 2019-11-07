@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) in $VAR(/security/vpn/ipsec/esp-group/@@) ; "ESP group '$VAR(@)' does not exist"

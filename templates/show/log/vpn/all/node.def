@@ -1,0 +1,2 @@
+help: Show log for ALL
+run: journalctl -a --no-pager _COMM=charon _COMM=xl2tpd _COMM=ppp

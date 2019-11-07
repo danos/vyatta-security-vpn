@@ -1,0 +1,3 @@
+help: Show all active IPsec Security Associations (SA) for a routing instance
+allowed: /opt/vyatta/share/tmplscripts/routing-instance/routing-instance-list.sh
+run: vyatta-op-vpn-ipsec-vici --show-ipsec-sa=brief --vrf=$6

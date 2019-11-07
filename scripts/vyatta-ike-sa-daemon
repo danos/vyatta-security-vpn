@@ -1,0 +1,2297 @@
+#!/usr/bin/env python3
+#
+# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# All rights reserved.
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+from collections import OrderedDict
+import heapq
+import json
+import os.path
+import pprint
+import random
+import sched
+import threading
+from threading import Event, Thread, RLock, Condition
+import time
+import traceback
+
+from enum import IntEnum, unique
+from itertools import count
+from queue import PriorityQueue, Empty
+import syslog
+from gi.repository import GLib
+
+import dbus
+import dbus.service
+import dbus.mainloop.glib
+import vici
+import _thread
+
+PP = None
+
+THREAD_CYCLE_DELAY = 1
+NUM_WORKER_THREADS = 4
+
+# Mimic 5400
+RECONNECT_DELAY = 10
+
+# 1024 is the lowest configurable prio on the CLI.
+# Unconfigured IKE configs have even lower priority: 1024+1
+IKE_PRIO_HIGHEST = 1
+IKE_PRIO_LOWEST = 1024+1
+
+JOB_PRIO_HIGHEST = 1
+JOB_PRIO_SHUTDOWN = JOB_PRIO_HIGHEST
+JOB_PRIO_RELOAD = 64
+JOB_PRIO_NORMAL = 1024
+
+DBUS_INTERFACE = 'net.vyatta.eng.security.vpn.ipsec'
+DBUS_OBJECT = '/net/vyatta/eng/security/vpn/ipsec'
+
+PATHMON_DBUS_INTERFACE = 'net.vyatta.monitord.v1'
+PATHMON_DBUS_PATH = '/net/vyatta/monitord/v1/state'
+PATHMON_DBUS_OBJECT = '/net/vyatta/monitord/v1/state'
+
+DAEMON_NAME = 'vyatta-ike-sa-daemon'
+DAEMON_CONF = '/var/run/vyatta-ike-sa-daemon/config.json'
+CHARON_PID = '/var/run/charon.pid'
+
+#
+# Syslog with thread name.
+#
+
+@unique
+class LOG(IntEnum):
+    JOB = 1
+    PATHMON = 2
+    CONN = 3
+    EVENT = 4
+
+LOGName = {
+    LOG.JOB: 'JOB',
+    LOG.PATHMON: 'PATHMON',
+    LOG.CONN: 'CONN',
+    LOG.EVENT: 'EVENT'
+}
+
+LOGLevel = {
+    'emerg': syslog.LOG_EMERG,
+    'alert': syslog.LOG_ALERT,
+    'crit': syslog.LOG_CRIT,
+    'err': syslog.LOG_ERR,
+    'warning': syslog.LOG_WARNING,
+    'notice': syslog.LOG_NOTICE,
+    'info': syslog.LOG_INFO,
+    'debug': syslog.LOG_DEBUG,
+}
+
+LOGLevelConfig = {
+    LOG.JOB: syslog.LOG_NOTICE,
+    LOG.PATHMON: syslog.LOG_NOTICE,
+    LOG.CONN: syslog.LOG_NOTICE,
+    LOG.EVENT: syslog.LOG_NOTICE,
+}
+
+def emerg(component, s):
+    _log(syslog.LOG_EMERG, component, s)
+
+def alert(component, s):
+    _log(syslog.LOG_ALERT, component, s)
+
+def crit(component, s):
+    _log(syslog.LOG_CRIT, component, s)
+
+def err(component, s):
+    _log(syslog.LOG_ERR, component, s)
+
+def warning(component, s):
+    _log(syslog.LOG_WARNING, component, s)
+
+def notice(component, s):
+    _log(syslog.LOG_NOTICE, component, s)
+
+def info(component, s):
+    _log(syslog.LOG_INFO, component, s)
+
+def dbg(component, s):
+    _log(syslog.LOG_DEBUG, component, s)
+
+def _log(loglevel, component, s):
+    myname = threading.currentThread().getName()
+
+    if loglevel <= LOGLevelConfig.get(component, syslog.LOG_NOTICE):
+        syslog.syslog(loglevel, '[{}] [{}] {}'.format(myname, LOGName[component], s))
+
+def dbg_enabled(component):
+    if syslog.LOG_DEBUG <= LOGLevelConfig.get(component, syslog.LOG_NOTICE):
+        return True
+
+    return False
+
+def ppformat(val):
+    global PP # pylint: disable=global-statement
+    if PP is None:
+        PP = pprint.PrettyPrinter(indent=2, depth=None)
+
+    return PP.pformat(val)
+
+def ipsec_running():
+    return os.path.isfile('/var/run/charon.pid')
+
+#
+# Exceptions
+#
+
+class SAError(Exception):
+    def __init__(self, error_code, delay):
+        self.error_code = error_code
+        self.delay = delay
+        msg = "SA Error occured with error code: {} and delay: {}".format(error_code, delay)
+        super(SAError, self).__init__(msg)
+
+class AuthSAError(SAError):
+    pass
+
+class ChildSAErrors(Exception):
+    def __init__(self, child_exceptions):
+        self.child_exceptions = child_exceptions
+        msg = "ChildSA Errors occured with {} child(s)".format(len(child_exceptions))
+        super(ChildSAErrors, self).__init__(msg)
+
+class PathMonBlindException(Exception):
+    pass
+
+class UnsupportedJobError(Exception):
+    pass
+
+class SkipJobException(Exception):
+    pass
+
+#
+# Enums
+#
+
+MAX_ENUM_ITEM = 1024
+
+@unique
+class SAErrorCode(IntEnum):
+    GENERIC_FAILURE = 1
+    EAP_FAILURE = 2
+    AUTHENTICATION_FAILED = 3
+
+@unique
+class Delay(IntEnum):
+    GENERIC_FAILURE = 1
+    EAP_FAILURE = 2
+    AUTHENTICATION_FAILED = 3
+    LAST_SERVER = 4
+    RECONNECT = 5
+
+@unique
+class FailoverMode(IntEnum):
+    DISABLED = 0
+    SEQUENTIAL = 1
+    RANDOM_START = 2
+
+@unique
+class MonitorPolicyStates(IntEnum):
+    NON_COMPLIANT = 0
+    COMPLIANT = 1
+    DELETED = 2
+    UNKNOWN = MAX_ENUM_ITEM
+
+@unique
+class MonitorPolicyOperator(IntEnum):
+    OR = 0
+    AND = 1
+
+@unique
+class SAState(IntEnum):
+    CONNECTING = 1
+    ESTABLISHED = 2
+    DESTROYING = 3
+    INACTIVE = 4
+    UNKNOWN = MAX_ENUM_ITEM
+
+@unique
+class Backoff(IntEnum):
+    DELAY = 1
+    BASE = 2
+    JITTER = 3
+    UPPER_LIMIT = 4
+
+
+
+#
+# Conn / IKE / Child classes
+#
+
+# Conn -- 1:n -- IKEConfig --- 1:n --- ChildConfig
+
+class SA(object):
+    def __init__(self, conn_id, logical_id=None):
+        self.state = SAState.INACTIVE
+        self.delay_iterations = {}
+
+        self.lock = RLock()
+        self.conn_id = conn_id
+        if logical_id is None:
+            self.logical_id = conn_id
+        else:
+            self.logical_id = logical_id
+
+    def get_conn(self):
+        raise NotImplementedError()
+
+    def get_delay(self, delay_code):
+        raise NotImplementedError()
+
+    def __repr__(self):
+        ret = OrderedDict()
+        ret.update([('state', self.state)])
+        ret.update([('lock', self.lock)])
+        ret.update([('conn_id', self.conn_id)])
+
+        return '{}\n\n'.format(ppformat(ret))
+
+    def update_state(self, new_state):
+        with self.lock:
+            dbg(LOG.CONN, '{}: {} state update {} -> {}'
+                .format(self.conn_id, type(self), self.state, new_state))
+            self.state = new_state
+
+            if new_state == SAState.ESTABLISHED:
+                self.delay_iterations = {}
+
+    def get_state(self):
+        return self.state
+
+    def initiate(self, vs, **kwargs):
+        with self.lock:
+            if self.state == SAState.ESTABLISHED:
+                info(LOG.CONN, 'initiate: Not required. SA already in the correct state. '
+                     'Current state: {}'.format(self.state))
+                return
+            elif self.state != SAState.INACTIVE:
+                info(LOG.CONN, 'initiate: aborted. SA currently not in the correct state. '
+                     'Current state: {}'.format(self.state))
+                return
+
+            try:
+                self.update_state(SAState.CONNECTING)
+                self._execute(vs, True, **kwargs)
+            except Exception as e:
+                self.update_state(SAState.INACTIVE)
+                raise e
+
+            self.update_state(SAState.ESTABLISHED)
+
+    def terminate(self, vs, **kwargs):
+        with self.lock:
+            if self.state != SAState.ESTABLISHED:
+                info(LOG.CONN, 'terminate: aborted. SA currently not in the correct state. '
+                     'Current state: {}'.format(self.state))
+                return
+
+            try:
+                self.update_state(SAState.DESTROYING)
+                self._execute(vs, False, **kwargs)
+            except Exception as e:
+                self.update_state(SAState.INACTIVE)
+                raise e
+
+            self.update_state(SAState.INACTIVE)
+
+
+    def _execute(self, vs, up, **kwargs):
+        def _dec(string):
+            if not string:
+                return None
+            return string.decode('utf-8')
+
+        sa = kwargs.get('sa')
+        failure = False
+
+        if up:
+            dbg(LOG.CONN, '[SA] initiate: {}'.format(sa))
+            stream = vs.initiate(sa)
+        else:
+            dbg(LOG.CONN, '[SA] terminate: {}'.format(sa))
+            stream = vs.terminate(sa)
+
+        last_ike_log_msg = None
+        try:
+            for log in stream:
+                if log['group'] == b'IKE':
+                    dbg(LOG.CONN, log)
+                    last_ike_log_msg = _dec(log['msg'])
+        except vici.exception.CommandException as e:
+            if up:
+                err(LOG.CONN, '[SA] initiate failed: {}'.format(e))
+            else:
+                err(LOG.CONN, '[SA] terminate failed: {}'.format(e))
+
+            if last_ike_log_msg:
+                err(LOG.CONN, '[SA] Last IKE log message: {}'.format(last_ike_log_msg))
+            failure = True
+
+        if not failure:
+            if up:
+                dbg(LOG.CONN, '[SA] initiate: successful.')
+            else:
+                dbg(LOG.CONN, '[SA] terminate: successful.')
+
+            return
+
+        if last_ike_log_msg and last_ike_log_msg.startswith('received EAP_FAILURE'):
+            error_code = SAErrorCode.EAP_FAILURE
+            delay_code = Delay.EAP_FAILURE
+        elif last_ike_log_msg and last_ike_log_msg.startswith('received AUTHENTICATION_FAILED'):
+            error_code = SAErrorCode.AUTHENTICATION_FAILED
+            delay_code = Delay.AUTHENTICATION_FAILED
+        else:
+            error_code = SAErrorCode.GENERIC_FAILURE
+            delay_code = Delay.GENERIC_FAILURE
+
+        if kwargs.get('last_server'):
+            delay = self.get_delay(Delay.LAST_SERVER)
+            dbg(LOG.CONN, '[SA] using source-interfaces/last_server delay')
+        else:
+            delay = self.get_delay(delay_code)
+
+
+        if error_code in (SAErrorCode.EAP_FAILURE, SAErrorCode.AUTHENTICATION_FAILED):
+            raise AuthSAError(error_code, delay)
+        else:
+            raise SAError(error_code, delay)
+
+class ChildConfig(SA):
+    def __init__(self, conn_id, ike_cfg, logical_id=None):
+        self.ike_cfg = ike_cfg
+        super().__init__(conn_id, logical_id)
+
+    def __repr__(self):
+        ret = OrderedDict()
+        ret.update([('ike_cfg', self.ike_cfg.conn_id)])
+
+        return '{} => {}'.format(ppformat(ret), super().__repr__())
+
+    def get_delay(self, delay_code):
+        conn = self.get_conn()
+        return conn.get_delay(delay_code)
+
+    def get_conn(self):
+        return self.ike_cfg.conn
+
+    def initiate(self, vs, **kwargs):
+        with self.lock:
+            sa = OrderedDict()
+            sa['child'] = self.conn_id
+            try:
+                notice(LOG.CONN, 'initiate CHILD SA: {}'.format(self.conn_id))
+                super().initiate(vs, sa=sa, **kwargs)
+                notice(LOG.CONN, 'initiate CHILD SA: {} completed.'.format(self.conn_id))
+            except Exception as e:
+                raise e
+
+
+    def terminate(self, vs, **kwargs):
+        with self.lock:
+            sa = OrderedDict()
+            sa['child'] = self.conn_id
+            super().terminate(vs, sa=sa)
+
+
+class IKEConfig(SA):
+
+    def __init__(self, conn, conn_id, logical_id=None):
+        self.intf = None
+        self.conn = None
+        self.priority = IKE_PRIO_LOWEST
+
+        self.conn = conn
+
+        self.childs = OrderedDict()
+        self.child_aliases = OrderedDict()
+
+        super().__init__(conn_id, logical_id)
+
+    def __repr__(self):
+        ret = OrderedDict()
+        ret.update([('intf', self.intf)])
+        ret.update([('priority', self.priority)])
+        ret.update([('childs', self.childs.keys())])
+        ret.update([('child_aliases', self.child_aliases.keys())])
+
+        return '{} => {}'.format(ppformat(ret), super().__repr__())
+
+    def add_child(self, child, alias_conn_id=None):
+        with self.lock:
+            self.childs.update([(child.conn_id, child)])
+            if alias_conn_id:
+                self.child_aliases.update([(alias_conn_id, child)])
+
+    def get_child(self, conn_id):
+        return self.childs.get(conn_id)
+
+    def get_conn(self):
+        return self.conn
+
+    def get_delay(self, delay_code):
+        conn = self.get_conn()
+        return conn.get_delay(delay_code)
+
+    def initiate(self, vs, **kwargs):
+        with self.lock:
+            child_exceptions = []
+
+            notice(LOG.CONN, 'initiate IKE SA: {}'.format(self.conn_id))
+
+            # Reschedule initiate job for individual CHILD_SA conn_id, for the same IKE SA
+            first_child_established = False
+            for c in self.childs:
+                child_cfg = self.childs[c]
+                try:
+                    child_cfg.initiate(vs, **kwargs)
+                    first_child_established = True
+                except SAError as e:
+                    # Exception on first child SA may indicate an IKE failure.
+                    # If the first child SA is established, further exceptions are not IKE related
+                    if not first_child_established:
+                        raise e
+
+                    child_exceptions.append((child_cfg, e))
+
+            notice(LOG.CONN, 'initiate IKE SA: {} completed.'.format(self.conn_id))
+
+            if child_exceptions:
+                raise ChildSAErrors(child_exceptions)
+
+    def terminate(self, vs, **kwargs):
+        with self.lock:
+            if self.state != SAState.ESTABLISHED:
+                err(LOG.CONN, '[IKE] terminate: aborted. ike_cfg currently not established: {}'
+                    .format(self.state))
+                return
+
+            sa = OrderedDict()
+            sa['ike'] = self.conn_id
+            super().terminate(vs, sa=sa)
+
+
+class Conn(IKEConfig):
+    def __init__(self, conn_id):
+        self.current_ike_cfg = None
+        self.ike_cfgs = OrderedDict()
+
+        super().__init__(self, conn_id)
+
+    def __repr__(self):
+        ret = OrderedDict()
+        if self.current_ike_cfg:
+            ret.update([('current_ike_cfg', self.current_ike_cfg.conn_id)])
+        ret.update([('ike_cfgs', self.ike_cfgs.keys())])
+        ret.update([('delay_iterations', self.delay_iterations)])
+
+        return '{} => {}\n\n'.format(ppformat(ret), super().__repr__())
+
+    def add_ike_cfg(self, ike_cfg):
+        with self.lock:
+            self.ike_cfgs.update([(ike_cfg.conn_id, ike_cfg)])
+
+    def get_ike_cfg(self, conn_id):
+        return self.ike_cfgs.get(conn_id)
+
+    def get_state(self):
+        if self.current_ike_cfg is None:
+            return SAState.INACTIVE
+
+        return self.current_ike_cfg.state
+
+    def get_delay(self, delay_code):
+        return RECONNECT_DELAY
+
+    def initiate(self, vs, **kwargs):
+
+        def _first_item(ike_cfgs):
+            return next(iter(ike_cfgs.items()))[1][0]
+
+        with self.lock:
+            ike_cfg = _first_item(self.ike_cfgs)
+            notice(LOG.CONN, 'initiate: {} using IKE SA: {}'.format(self.conn_id, ike_cfg.conn_id))
+
+            self.current_ike_cfg = ike_cfg
+            ike_cfg.initiate(vs)
+
+            notice(LOG.CONN, 'initiate: {} using IKE SA: {} completed.'
+                   .format(self.conn_id, ike_cfg.conn_id))
+
+    def terminate(self, vs, **kwargs):
+        with self.lock:
+            if self.current_ike_cfg is None:
+                err(LOG.CONN, 'terminate failed: current IKE SA unknown')
+                return
+
+            self.current_ike_cfg.terminate(vs)
+            self.current_ike_cfg = None
+
+
+class Site2Site(Conn):
+    @staticmethod
+    def prefix():
+        return 'peer-'
+
+class DMVPNSpoke(Conn):
+    @staticmethod
+    def prefix():
+        return ''
+
+class IPsecRAVPNClientChildConfig(ChildConfig):
+
+    def __init__(self, conn_id, ike_cfg, logical_id):
+        super().__init__(conn_id, ike_cfg, logical_id)
+
+class IPsecRAVPNClientIKEConfig(IKEConfig):
+
+    def __init__(self, conn, conn_id, logical_id):
+        self.policy_operator = MonitorPolicyOperator.OR
+        self.monitors = []
+        self.monitor_state = MonitorPolicyStates.UNKNOWN
+
+        super().__init__(conn, conn_id, logical_id)
+
+    def __repr__(self):
+        ret = OrderedDict()
+        ret.update([('policy_operator', self.policy_operator)])
+        ret.update([('monitors', self.monitors)])
+        ret.update([('monitor_state', self.monitor_state)])
+
+        return '{} => {}'.format(ppformat(ret), super().__repr__())
+
+class IPsecRAVPNClient(Conn):
+
+    def __init__(self, conn_id):
+        self.failover_mode = FailoverMode.DISABLED
+        self.backoff_settings = {}
+
+        self.path_monitor_mode = None
+        self.first_server = None
+        self.last_ike_cfg = None
+        self.is_using_last_server = None
+        super().__init__(conn_id)
+
+    def __repr__(self):
+        ret = OrderedDict()
+        ret.update([('failover_mode', self.failover_mode)])
+        ret.update([('backoff_settings', self.backoff_settings)])
+
+        ret.update([('path_monitor_mode', self.path_monitor_mode)])
+
+        if self.first_server:
+            ret.update([('first_server', self.first_server.conn_id)])
+        if self.last_ike_cfg:
+            ret.update([('last_ike_cfg', self.last_ike_cfg.conn_id)])
+
+        ret.update([('is_using_last_server', self.is_using_last_server)])
+
+        return '{} => {}'.format(ppformat(ret), super().__repr__())
+
+    @staticmethod
+    def prefix():
+        return 'ipsec_ra_client-'
+
+    def initiate(self, vs, **kwargs):
+
+        def _first_item(ike_cfgs):
+            if isinstance(ike_cfgs, list):
+                return ike_cfgs[0]
+            return next(iter(ike_cfgs.items()))[1][0]
+
+        def _random_item(ike_cfgs):
+            if isinstance(ike_cfgs, list):
+                candidates = ike_cfgs
+            else:
+                candidates = next(iter(ike_cfgs.items()))[1]
+
+            return random.choice(candidates)
+
+        with self.lock:
+            failover = kwargs.get('failover')
+
+            dbg(LOG.CONN, 'initiate of IPsec RA VPN client. Current state: {}'
+                .format(self.get_state()))
+
+            if self.get_state() == SAState.ESTABLISHED:
+                info(LOG.CONN, 'IKE SA already in {} state, re-establishing '
+                     'Child SAs'. format(self.get_state()))
+                self.current_ike_cfg.initiate(vs)
+                return
+            elif self.get_state() != SAState.INACTIVE:
+                info(LOG.CONN, 'initiate of IPsec RA VPN client aborted. IKE SA currently not in'
+                     ' the correct state. Current state: {}'.format(self.get_state()))
+                return
+
+            self.last_ike_cfg = self.current_ike_cfg
+
+            if failover:
+                self._perform_failover()
+            else:
+                try:
+                    ike_cfgs = self._get_compliant_items()
+                except PathMonBlindException:
+                    ike_cfgs = self._ike_cfgs_grouped_by_intf()
+
+                # RANDOM-START is only used initially.
+                # Not on any failover triggered initiate() calls.
+                if self.failover_mode == FailoverMode.RANDOM_START and not failover:
+                    self.current_ike_cfg = _random_item(ike_cfgs)
+                else:
+                    self.current_ike_cfg = _first_item(ike_cfgs)
+
+                self.first_server = self.current_ike_cfg
+
+            notice(LOG.CONN, 'initiate IPsec RA VPN client: {} using IKE SA: {} '
+                   '(failover={} failover_mode={})'
+                   .format(self.conn_id, self.current_ike_cfg.conn_id, failover,
+                           self.failover_mode))
+
+            self.current_ike_cfg.initiate(vs, failover=failover,
+                                          last_server=self.is_using_last_server)
+
+            # Reset error iterations, once succesfully connected.
+            self.reset_delay_iterations()
+
+            notice(LOG.CONN, 'initiate IPsec RA VPN client: {} using IKE SA: {} completed.'
+                   .format(self.conn_id, self.current_ike_cfg.conn_id))
+
+    def _ike_cfgs(self):
+        def _get_prio(item):
+            return item.priority
+
+        return sorted(self.ike_cfgs.values(), key=_get_prio)
+
+    def _ike_cfgs_grouped_by_intf(self):
+        def _get_prio(item):
+            return item[0]
+
+        ret = OrderedDict()
+        group_prio = OrderedDict()
+        for n in self.ike_cfgs:
+            priority = self.ike_cfgs[n].priority
+            intf = self.ike_cfgs[n].intf
+            if not group_prio.get((priority, intf)):
+                group_prio[(priority, intf)] = []
+
+            group_prio[(priority, intf)].append(self.ike_cfgs[n])
+
+        group_prio = sorted(group_prio, key=_get_prio)
+
+        # another round, since the sorted() calls replaces the IKEConfig with a string.
+        # only for that reason another round is taken to maintain the user-order, in case
+        # of same priorities
+        for _, group_intf in group_prio:
+            for n in self.ike_cfgs:
+                intf = self.ike_cfgs[n].intf
+                priority = self.ike_cfgs[n].priority
+                if intf != group_intf:
+                    continue
+                if not ret.get((priority, intf)):
+                    ret[(priority, intf)] = []
+                ret[(priority, intf)].append(self.ike_cfgs[n])
+
+        return ret
+
+    def set_path_monitor_mode(self, state):
+        if self.path_monitor_mode == state:
+            return
+
+        if state is False:
+            warning(LOG.PATHMON, '{}: entering non-path-monitor mode'.format(self.conn_id))
+        else:
+            warning(LOG.PATHMON, '{}: leaving non-path-monitor mode'.format(self.conn_id))
+
+        self.path_monitor_mode = state
+
+    def _perform_failover(self):
+        pathmon_mode = True
+
+        if self.failover_mode == FailoverMode.DISABLED:
+            return
+
+        try:
+            prio_list, current_pos = self._perform_failover_pm()
+        except PathMonBlindException:
+            pathmon_mode = False
+            prio_list, current_pos = self._perform_failover_non_pm()
+
+        next_pos = (current_pos + 1) % len(prio_list)
+        self.current_ike_cfg = prio_list[next_pos]
+
+        notice(LOG.CONN, 'failover to IKE SA: {}'.format(self.current_ike_cfg.conn_id))
+
+        if pathmon_mode and (self.last_ike_cfg is None
+                             or self.last_ike_cfg.intf != self.current_ike_cfg.intf):
+            self.first_server = self.current_ike_cfg
+
+        # forecast if this is the last server
+        forecast_pos = (next_pos + 1) % len(prio_list)
+        if prio_list[forecast_pos] == self.first_server:
+            self.is_using_last_server = True
+        else:
+            self.is_using_last_server = False
+
+    def _get_compliant_items(self):
+        by_intf = self._ike_cfgs_grouped_by_intf()
+        compliant_ike_cfgs = []
+        for prio, intf in by_intf:
+            for ike_cfg in by_intf[(prio, intf)]:
+                dbg(LOG.CONN, 'ike_cfg monitor state: {} -> {}'
+                    .format(ike_cfg.conn_id, ike_cfg.monitor_state))
+                if ike_cfg.monitor_state != MonitorPolicyStates.COMPLIANT:
+                    continue
+
+                compliant_ike_cfgs.append(ike_cfg)
+
+            if compliant_ike_cfgs:
+                break
+
+        if not compliant_ike_cfgs:
+            self.set_path_monitor_mode(False)
+            raise PathMonBlindException()
+
+        return compliant_ike_cfgs
+
+    def _perform_failover_pm(self):
+        prio_list = self._get_compliant_items()
+
+        try:
+            current_pos = prio_list.index(self.current_ike_cfg)
+        # ike_cfg is not in the list, use the first list item instead
+        except ValueError:
+            current_pos = -1
+
+        return prio_list, current_pos
+
+    def _perform_failover_non_pm(self):
+        prio_list = self._ike_cfgs()
+        try:
+            current_pos = prio_list.index(self.current_ike_cfg)
+        # ike_cfg is not in the list, use the first list item instead
+        except ValueError:
+            current_pos = -1
+        return prio_list, current_pos
+
+    def _get_delay(self, backoff_type, code):
+        return self.backoff_settings[code][backoff_type]
+
+    def reset_delay_iterations(self):
+        for delay_code in self.delay_iterations:
+            self.delay_iterations[delay_code] = 0
+
+    def get_delay(self, delay_code):
+        def _random(_min, _max):
+            if _max == 0:
+                return 0
+            x = int(random.randrange(_min, int(_max*100)) / 100)
+            return x
+
+        with self.lock:
+            if not self.delay_iterations.get(delay_code):
+                self.delay_iterations[delay_code] = 0
+
+            self.delay_iterations[delay_code] += 1
+            n = self.delay_iterations[delay_code]
+
+            delay = self._get_delay(Backoff.DELAY, delay_code)
+            base = self._get_delay(Backoff.BASE, delay_code)
+            upper_limit = self._get_delay(Backoff.UPPER_LIMIT, delay_code)
+            jitter = self._get_delay(Backoff.JITTER, delay_code)
+
+            delay_jitter = _random(0, (jitter/100) * delay)
+            new_delay = (delay * base ** (n - 1)) - delay_jitter
+            new_delay = round(new_delay, 2)
+
+            if not upper_limit or new_delay < upper_limit:
+                ret = new_delay
+            else:
+                ret = upper_limit
+
+            return ret
+
+#
+# D-Bus
+#
+
+class DBusIPsecService(dbus.service.Object):
+    def __init__(self, daemon):
+        self.daemon = daemon
+        system_bus = dbus.SystemBus()
+        bus_name = dbus.service.BusName(DBUS_INTERFACE, system_bus)
+        dbus.service.Object.__init__(self, bus_name, DBUS_OBJECT)
+
+    def run(self):
+        ''' dummy function. avoids unused service variable in pylint. '''
+
+    # reload configuration
+    @dbus.service.method(DBUS_INTERFACE, in_signature='', out_signature='')
+    def reload(self):
+        dbg(LOG.EVENT, '[D-Bus] reload')
+        self.daemon.schedule(ReloadConfigJob(self.daemon), prio=JOB_PRIO_RELOAD)
+
+    #
+    # UP/DOWN/RESET
+    #
+    # IKE / child SA for others
+    # - child SA: ...-tunnel-$N
+    # - IKE   SA: ...
+    #
+    # IKE / child SA for ipsec_ra_client
+    # - child SA: ipsec_ra_client-$PROFILE-tunnel-$N
+    # - IKE SA  : ipsec_ra_client-$PROFILE
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='as', out_signature='')
+    def up(self, conns):
+        for conn_id in conns:
+            conn_obj = self.daemon.find_conn(conn_id)
+            if conn_obj is None:
+                dbg(LOG.EVENT, '[D-Bus] up: can not find connection \"{}\".'.format(conn_id))
+                continue
+
+            dbg(LOG.EVENT, '[D-Bus] bringing SA up for \"{}\".'.format(conn_id))
+            self.daemon.schedule(InitiateJob(self.daemon, conn_obj))
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='as', out_signature='')
+    def down(self, conns):
+        for conn_id in conns:
+            conn_obj = self.daemon.find_conn(conn_id)
+            if conn_obj is None:
+                dbg(LOG.EVENT, '[D-Bus] down: can not find connection \"{}\".'.format(conn_id))
+                continue
+
+            dbg(LOG.EVENT, '[D-Bus] bringing SA down for \"{}\".'.format(conn_id))
+            self.daemon.schedule(TerminateJob(self.daemon, conn_obj))
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='as', out_signature='')
+    def reset(self, conns):
+        for conn_id in conns:
+            conn_obj = self.daemon.find_conn(conn_id)
+            if conn_obj is None:
+                dbg(LOG.EVENT, '[D-Bus] reset: can not find connection \"{}\".'.format(conn_id))
+                continue
+
+            dbg(LOG.EVENT, '[D-Bus] resetting SA for \"{}\".'.format(conn_id))
+            self.daemon.schedule(ResetJob(self.daemon, conn_obj))
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='', out_signature='s')
+    def show_debug(self):
+
+        return self.daemon.show_debug()
+
+
+#
+# Jobs
+#
+
+class Job(object):
+    def __init__(self, daemon):
+        self.daemon = daemon
+        self.removed = False
+
+    def set_event(self, event):
+        del event # unused
+        raise UnsupportedJobError()
+
+    def locked_handler(self, item):
+        raise JobLockedError(item)
+
+    def try_lock(self):
+        return True
+
+    def release(self):
+        return None
+
+    def is_stale(self):
+        return False
+
+    def is_removed(self):
+        return self.removed
+
+    def set_removed(self, state=True):
+        self.removed = state
+
+    def run(self, vs):
+        pass
+
+    def add_job(self, job_args):
+        pass
+
+    def remove_job(self):
+        pass
+
+    def delete_job(self):
+        pass
+
+
+class UpDownBaseJob(Job):
+    def __init__(self, daemon, conn_obj):
+        self.conn_obj = conn_obj
+        super().__init__(daemon)
+
+    def locked_handler(self, item):
+        conn = self.conn_obj.get_conn()
+        conn_id = conn.conn_id
+
+        prio, _, _ = item
+        with self.daemon.lock_conns_job_queue:
+            self.daemon.add_job(self, prio, job_queue=self.daemon.conns_job_queue[conn_id])
+            self.set_removed(False)
+
+    def try_lock(self):
+        ret = self.conn_obj.get_conn().lock.acquire(blocking=False)
+        if ret:
+            dbg(LOG.JOB, 'acquired conn lock: {}'.format(self.conn_obj.get_conn().conn_id))
+
+        return ret
+
+    def release(self):
+        conn = self.conn_obj.get_conn()
+        next_job = self.daemon.get_locked_job(conn.conn_id)
+        if next_job is None:
+            dbg(LOG.JOB, 'releasing conn lock: {}'.format(conn.conn_id))
+            conn.lock.release()
+            dbg(LOG.JOB, 'released conn lock: {}'.format(conn.conn_id))
+
+        return next_job
+
+
+    def is_stale(self):
+        conn_id = self.conn_obj.conn_id
+        return conn_id not in self.daemon.conns and    \
+                  conn_id not in self.daemon.ike_cfgs and \
+                  conn_id not in self.daemon.child_cfgs
+
+    # Could be decomposed further, particularly the acquire(), cancel(), release() routine.
+    def set_event(self, event):
+        conn_id = self.conn_obj.conn_id
+        if conn_id in self.daemon.event_index_updown:
+            old_event = self.daemon.event_index_updown.get(conn_id)
+            self.daemon.scheduler_cond.acquire()
+            try:
+                self.daemon.scheduler.cancel(old_event)
+            except ValueError:
+                pass
+            self.daemon.scheduler_cond.release()
+
+        self.daemon.event_index_updown[conn_id] = event
+
+    def initiate(self, vs, **kwargs):
+        reschedule = False
+        reschedule_delay = None
+        child_exceptions = None
+        failover = kwargs.get('failover')
+        conn_obj = kwargs.get('conn_obj')
+        dbg(LOG.JOB, 'UpDownBaseJob: initiate: {}/failover={}'.format(conn_obj.conn_id, failover))
+
+        try:
+            conn_obj.initiate(vs, failover=failover)
+        except AuthSAError as e:
+            notice(LOG.CONN, 'initiate recieved authentication failure: {}. '
+                   'rescheduling initiate job in {} seconds.'.format(conn_obj.conn_id, e.delay))
+            reschedule = True
+            reschedule_delay = e.delay
+        except SAError as e:
+            notice(LOG.CONN, 'initiate failed: {}. rescheduling initiate job in {} seconds.'
+                   .format(conn_obj.conn_id, e.delay))
+            reschedule = True
+            reschedule_delay = e.delay
+        except ChildSAErrors as e:
+            notice(LOG.CONN, 'initiation of one or more CHILD SA failed: {}. IKE SA is up.'
+                   .format(conn_obj.conn_id))
+            reschedule = True
+            child_exceptions = e.child_exceptions
+
+        if not reschedule:
+            return
+
+
+        # use higher level Conn object for failover
+        if isinstance(conn_obj, IKEConfig):
+            conn_obj = conn_obj.conn
+        # for Childs, only failover if the Conn object is inactive
+        elif isinstance(conn_obj, ChildConfig) \
+              and conn_obj.ike_cfg.state == SAState.INACTIVE:
+            conn_obj = conn_obj.ike_cfg.conn
+
+        if child_exceptions:
+            for child_cfg, child_exception in child_exceptions:
+                e = child_exception
+                notice(LOG.CONN, 'rescheduling initiate job for CHILD SA {} in {} seconds.'
+                       .format(child_cfg.conn_id, e.delay))
+                job = InitiateJob(self.daemon, child_cfg, failover=False)
+                self.daemon.schedule(job, delay=e.delay)
+        else:
+            job = InitiateJob(self.daemon, conn_obj, failover=True)
+            self.daemon.schedule(job, delay=reschedule_delay)
+
+    def terminate(self, vs, **kwargs):
+        conn_obj = kwargs.get('conn_obj')
+        dbg(LOG.JOB, 'UpDownBaseJob: terminate: {}'.format(conn_obj.conn_id))
+        try:
+            conn_obj.terminate(vs)
+        except SAError:
+            dbg(LOG.JOB, 'terminate failed: ignored.')
+
+    def remove_job(self):
+        logical_id = self.conn_obj.logical_id
+        self.daemon.remove_updown_job(logical_id)
+
+    def delete_job(self):
+        logical_id = self.conn_obj.logical_id
+        try:
+            del self.daemon.job_index_updown[logical_id]
+        except KeyError as e:
+            dbg(LOG.JOB, 'Could not find job in updown index: {}'.format(e))
+
+    def add_job(self, job_args):
+        logical_id = self.conn_obj.logical_id
+        self.daemon.job_index_updown[logical_id] = job_args
+
+
+
+class InitiateJob(UpDownBaseJob):
+
+    def __init__(self, daemon, conn_obj, failover=False):
+        self.name = 'Initiate'
+        self.failover = failover
+        super().__init__(daemon, conn_obj)
+
+    def run(self, vs):
+        self.initiate(vs, conn_obj=self.conn_obj, failover=self.failover)
+
+class TerminateJob(UpDownBaseJob):
+
+    def __init__(self, daemon, conn_obj):
+        self.name = 'Terminate'
+        super().__init__(daemon, conn_obj)
+
+
+    def run(self, vs):
+        self.terminate(vs, conn_obj=self.conn_obj)
+
+class ResetJob(UpDownBaseJob):
+
+    def __init__(self, daemon, conn_obj, failover=True):
+        self.name = 'Reset'
+        self.failover = failover
+        super().__init__(daemon, conn_obj)
+
+    def run(self, vs):
+        self.terminate(vs, conn_obj=self.conn_obj)
+        self.initiate(vs, conn_obj=self.conn_obj, failover=self.failover)
+
+class PathMonStateChangeJob(Job):
+
+    def __init__(self, daemon, monitor, policy, state):
+        self.name = 'PathMonStateChange'
+        self.monitor = monitor
+        self.policy = policy
+        self.state = state
+        super().__init__(daemon)
+
+    def __repr__(self):
+        return '{}: {}/{}/{}'.format(self.name, self.monitor, self.policy, self.state)
+
+    def run(self, vs):
+        del vs # unused
+        with self.daemon.lock_pathmon:
+            return self._run()
+
+    def _run(self):
+        do_failover = False
+
+        dbg(LOG.PATHMON, 'PathMonStateChangeJob: monitor: {}, policy: {}'
+            .format(self.monitor, self.policy))
+
+        # lookup affected IKEConfigs
+        conn_ids = self.daemon.path_mon_cfgs.get((self.monitor, self.policy))
+
+        # Ignore path-monitor signals for monitors no longer
+        # relelvant assigned to any IPsec connection
+        if conn_ids is None:
+            return
+
+        # update state
+        state = MonitorPolicyStates(self.state)
+        self.daemon.path_monitor_state[(self.monitor, self.policy)] = state
+
+
+        # 1. recalculate the sate for all IKEConfigs
+        ike_cfgs = []
+        for conn_id in conn_ids:
+            ike_cfg = self.daemon.find_ike_cfg(conn_id)
+
+            if ike_cfg is None:
+                dbg(LOG.PATHMON, 'Could not find any IKE configuration for "{}"'.format(conn_id))
+                continue
+
+            if not isinstance(ike_cfg.conn, IPsecRAVPNClient):
+                dbg(LOG.PATHMON, 'connection type not supported for path-monitor usage:  "{}/{}"'
+                    .format(conn_id, type(ike_cfg.conn)))
+                continue
+
+            # Handle policy operator
+            policy_operator = ike_cfg.policy_operator
+            dbg(LOG.PATHMON, 'policy_operator: {}'.format(policy_operator))
+
+            # Update monitor state for ike_cfg
+            self.daemon.pathmon_update_ike_cfg(ike_cfg)
+            ike_monitor_state = ike_cfg.monitor_state
+            dbg(LOG.PATHMON, 'ike_cfg monitor_state: {}'.format(ike_monitor_state))
+
+            if ike_cfg.conn.failover_mode != FailoverMode.DISABLED:
+                ike_cfgs.append(ike_cfg)
+
+        dbg(LOG.PATHMON, 'PathMonStateChangeJob: affected IKEConfigs: {}'.format(len(ike_cfgs)))
+
+        # 2. decide where to failover/rollback to
+        for ike_cfg in ike_cfgs:
+
+            dbg(LOG.PATHMON, 'PathMonStateChangeJob: affected IKEConfig: {}'
+                .format(ike_cfg.conn_id))
+
+            # failover management is done at the (higher) connection object level
+            conn = ike_cfg.conn
+
+            if state == MonitorPolicyStates.COMPLIANT:
+                conn.set_path_monitor_mode(True)
+
+            dbg(LOG.PATHMON, '\tpm.state: {} pm.monitor: {} pm.policy: {}'
+                .format(state, self.monitor, self.policy))
+            if conn.current_ike_cfg:
+                dbg(LOG.PATHMON, '\tike_cfg: {}/{} conn.current_ike_cfg: {}/{}'
+                    .format(ike_cfg.conn_id, ike_cfg.state, conn.current_ike_cfg.conn_id,
+                            conn.current_ike_cfg.state))
+                dbg(LOG.PATHMON, '\tcurrent_ike_cfg.priority: {} vs. ike_cfg.priority: {}'
+                    .format(conn.current_ike_cfg.priority, ike_cfg.priority))
+            else:
+                dbg(LOG.PATHMON, '\tike_cfg: {} conn.current_ike_cfg: {}'
+                    .format(ike_cfg.conn_id, conn.current_ike_cfg))
+
+            # currenlty in transition
+            if conn.get_state() in (SAState.CONNECTING, SAState.DESTROYING, SAState.UNKNOWN):
+                dbg(LOG.PATHMON, '\tRESULT: skip: current conn in transition:{} {}'
+                    .format(conn.get_state(), ike_cfg.conn_id))
+                continue
+
+            if conn.current_ike_cfg.conn_id is None:
+                dbg(LOG.PATHMON, '\tRESULT: skip: current_ike_cfg not set')
+                continue
+
+            if ike_cfg.monitor_state == MonitorPolicyStates.COMPLIANT:
+
+                # already in use, skip
+                if conn.current_ike_cfg.conn_id == ike_cfg.conn_id:
+                    dbg(LOG.PATHMON, '\tRESULT: skip: already in use. {}'.format(ike_cfg.conn_id))
+                    continue
+
+                if conn.current_ike_cfg.priority <= ike_cfg.priority:
+                    dbg(LOG.PATHMON, '\tRESULT: skip: current prio is higher or equal. {}'
+                        .format(ike_cfg.conn_id))
+                    continue
+
+                # failover
+                do_failover = True
+                dbg(LOG.PATHMON, '\tmonitor: {} / policy: {} is COMPLIANT. Rollback: {}'
+                    .format(self.monitor, self.policy, ike_cfg.conn_id))
+
+            elif ike_cfg.monitor_state == MonitorPolicyStates.NON_COMPLIANT:
+                # not used, skip
+                if conn.current_ike_cfg.conn_id != ike_cfg.conn_id:
+                    dbg(LOG.PATHMON, '\tRESULT: skip: current_ike_cfg no affected (NON_COMPLIANT).'
+                                     '{}'.format(ike_cfg.conn_id))
+                    continue
+
+                # failover
+                do_failover = True
+                dbg(LOG.PATHMON, '\tmonitor: {} / policy: {} is NON_COMPLIANT. Failover: {}'
+                    .format(self.monitor, self.policy, ike_cfg.conn_id))
+
+            if do_failover:
+                if conn.current_ike_cfg:
+                    job = ResetJob(self.daemon, conn, failover=True)
+                else:
+                    job = InitiateJob(self.daemon, conn, failover=True)
+
+                self.daemon.schedule(job)
+
+    def remove_job(self):
+        pm_tuple = (self.monitor, self.policy)
+        self.daemon.remove_pm_job(pm_tuple)
+
+    def delete_job(self):
+        pm_tuple = (self.monitor, self.policy)
+        del self.daemon.job_index_pm_state_change[pm_tuple]
+
+    def add_job(self, job_args):
+        pm_tuple = (self.monitor, self.policy)
+        self.daemon.job_index_pm_state_change[pm_tuple] = job_args
+
+
+class PathMonClearPolicyStateJob(Job):
+
+    def __init__(self, daemon):
+        self.name = 'PathMonClearPolicyState'
+        super().__init__(daemon)
+
+    def __repr__(self):
+        return '{}'.format(self.name)
+
+    def run(self, vs):
+        del vs # unused
+        with self.daemon.lock_pathmon:
+            self._run()
+
+    def _run(self):
+        info(LOG.PATHMON, 'Recieved clear_policy_state signal from path-monitor.')
+        self.daemon.path_monitor_state = {}
+        for ike_cfg in self.daemon.ike_cfgs:
+            self.daemon.pathmon_update_ike_cfg(self.daemon.ike_cfgs[ike_cfg])
+
+class ReloadConfigJob(Job):
+
+    def __init__(self, daemon):
+        self.name = 'ReloadConfig'
+        super().__init__(daemon)
+
+    def __repr__(self):
+        return '{}'.format(self.name)
+
+    def run(self, vs):
+        del vs # unused
+        self.daemon.read_config()
+
+class JobLockedError(Exception):
+    def __init__(self, item):
+        self.locked_item = item
+        msg = "Job is already locked"
+        super(JobLockedError, self).__init__(msg)
+
+class JobPriorityQueue(PriorityQueue):
+    def __init__(self):
+        super().__init__()
+
+        # https://bugs.python.org/issue14976
+        self.mutex = RLock()
+
+    def log_queue(self):
+        dbg(LOG.JOB, 'QUEUE content: {}'.format(self.queue))
+
+    def _get_next_item(self):
+        """ Get the next non-locked job item. Raises IndexError if heap is empty.  """
+        item = heapq.heappop(self.queue)
+
+        job = item[-1]
+
+        # check if the job is not locked and return it
+        if job.try_lock() is False:
+            raise JobLockedError(item)
+
+        return item
+
+    def _get(self):
+        """ overload PriorityQueue._get """
+
+        with self.mutex:
+            return self._get_next_item()
+
+
+#
+# Daemon
+#
+
+class Daemon:
+
+    def __init__(self):
+        self.conns = OrderedDict()
+        self.conn_tunnels = OrderedDict()
+        self.ike_cfgs = OrderedDict()
+        self.child_cfgs = OrderedDict()
+        self.path_mon_cfgs = {}
+
+        self.dbus_obj_pathmon = None
+        self.system_bus = None
+
+        #
+        # Threading
+        #
+        self.monitor_event = Event()
+        self.job_queue = JobPriorityQueue()
+        self.conns_job_queue = {} # job queues per connection
+        self.job_index_updown = {} # required for removing queued updown jobs
+        self.event_index_updown = {} # required for removing/canceling the delayed scheduled jobs
+        self.job_index_pm_state_change = {} # required for removing queued PathMonStateChange jobs
+        self.job_count = count()
+        self.num_worker_threads = NUM_WORKER_THREADS
+        self.worker_threads = []
+
+        # Scheduler
+        self.scheduler = sched.scheduler(time.time, time.sleep)
+        self.scheduler_cond = Condition()
+
+        # Locks
+        self.lock_config = RLock()
+        self.job_count_lock = RLock()
+        self.lock_pathmon = RLock()
+        self.lock_conns_job_queue = RLock()
+
+        # Shutdown event
+        self.shutdown_event = Event()
+        self.shutdown_event.clear()
+
+        # Path Monitor
+        self.path_monitor_mode = False
+        self.path_monitor_state = {}
+
+        # Listener (single threaded)
+        self._ike_updown_refcount = {}
+
+    def run(self):
+        notice(LOG.CONN, '{} started.'.format(DAEMON_NAME))
+
+        #
+        # D-Bus
+        #
+        service = DBusIPsecService(self)
+        service.run()
+
+        # Pathmon signal handling via D-Bus
+        self.system_bus = dbus.SystemBus()
+
+        # Scheduler thread
+        scheduler_thread = Thread(name='Scheduler', target=self._scheduler_func)
+        scheduler_thread.start()
+
+        # Worker threads
+        for n in range(self.num_worker_threads):
+            wt = Thread(name='worker-{}'.format(n), target=self._worker_func)
+            wt.start()
+            self.worker_threads.append(wt)
+
+        # VICI listener thread
+        listener_thread = Thread(name='Listener', target=self._listen_func)
+        listener_thread.start()
+
+        try:
+            # Mainloop for D-Bus interface
+            mainloop = GLib.MainLoop()
+            mainloop.run()
+        except (SystemExit, KeyboardInterrupt):
+            notice(LOG.CONN, 'Exit.')
+            mainloop.quit()
+
+            # Signal monitor and reconnect thread stop
+            self.shutdown_event.set()
+
+            listener_thread.join()
+            dbg(LOG.EVENT, 'Listner join complete')
+
+            for n in range(self.num_worker_threads):
+                self.schedule(None, prio=JOB_PRIO_SHUTDOWN)
+
+            for wt in self.worker_threads:
+                wt.join()
+
+            dbg(LOG.EVENT, 'Worker(s) join complete')
+
+    def _pathmon_query_state(self, monitor, policy):
+        try:
+            self.dbus_obj_pathmon = self.system_bus.get_object(PATHMON_DBUS_INTERFACE,
+                                                               PATHMON_DBUS_OBJECT)
+            state = self.dbus_obj_pathmon.get_state(monitor, policy)
+            if state != MonitorPolicyStates.DELETED:
+                dbg(LOG.PATHMON, 'path-monitor state query result monitor: {} / policy: {} -> {}'
+                    .format(monitor, policy, state))
+            return state
+        except dbus.exceptions.DBusException as e:
+            if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown':
+                self.path_monitor_mode = False
+            else:
+                err(LOG.PATHMON, 'path-monitor get_state({}, {}) exception: {}'
+                    .format(monitor, policy, e))
+
+        return MonitorPolicyStates.UNKNOWN
+
+    def _read_config_dmvpn_spoke(self, top_cfg):
+        # DMVPN Spoke
+        try:
+            profiles = top_cfg['ipsec']['profile']
+        except KeyError:
+            profiles = []
+
+        try:
+            for p in profiles:
+                try:
+                    tunnel_intfs = p['bind']['tunnel']
+                except KeyError:
+                    continue
+
+
+                for bind_tunnel in tunnel_intfs:
+                    nhrp_maps = None
+                    local_ip = None
+                    tunnel_intf = bind_tunnel['tagnode']
+
+                    try:
+                        for tunnel in top_cfg['interfaces']['tunnel']:
+                            if tunnel['tagnode'] == tunnel_intf:
+                                nhrp_maps = tunnel['nhrp']['map']
+                                local_ip = tunnel['local-ip']
+                                break
+                    except KeyError as e:
+                        continue
+
+                    # Skip DMVPN Hub setups
+                    if not nhrp_maps:
+                        continue
+
+                    # DMVPN Spoke is usually using transport mode, one IKE SA, one Child SA.
+                    # All using the same conn_id.
+                    prefix = '{}{}-{}'.format(DMVPNSpoke.prefix(), tunnel_intf, local_ip)
+                    for nhrp_map in nhrp_maps:
+                        conn_id = '{}-to-{}'.format(prefix, nhrp_map['nbma-address'])
+                        conn = self.find_conn(conn_id)
+                        if conn is None:
+                            conn = DMVPNSpoke(conn_id)
+
+                        self.conns.update([(conn_id, conn)])
+
+                        ike_cfg = self.find_ike_cfg(conn_id)
+                        if ike_cfg is None:
+                            ike_cfg = IKEConfig(conn, conn_id)
+
+                        self.ike_cfgs.update([(conn_id, ike_cfg)])
+                        conn.add_ike_cfg(ike_cfg)
+
+                        child_conn_id = conn_id
+                        child_cfg = self.find_child_cfg(child_conn_id)
+                        if child_cfg is None:
+                            child_cfg = ChildConfig(child_conn_id, ike_cfg)
+
+                        ike_cfg.add_child(child_cfg, child_conn_id)
+                        self.child_cfgs.update([(child_conn_id, child_cfg)])
+
+        except KeyError as e:
+            err(LOG.EVENT, 'key error exception while loading configuration: {}'.format(e))
+
+
+    def _read_config_site2site(self, top_cfg):
+        # site-to-site (including VTI)
+        try:
+            peers = top_cfg['ipsec']['site-to-site']['peer']
+        except KeyError:
+            peers = []
+
+        try:
+            for p in peers:
+                # Ignore respodner-only connection types.
+                # Currently no state tracking required for such connections.
+                if p['connection-type'] == 'respond':
+                    continue
+
+                try:
+                    if p.get('vti'):
+                        first_tunnel_id = 'vti'
+                    else:
+                        first_tunnel_id = p['tunnel'][0]['tagnode']
+                except KeyError:
+                    continue
+                prefix = '{}{}-tunnel-'.format(Site2Site.prefix(), p['tagnode'])
+                conn_id = '{}{}'.format(prefix, first_tunnel_id)
+                conn = self.find_conn(conn_id)
+                if conn is None:
+                    conn = Site2Site(conn_id)
+
+                self.conns.update([(conn_id, conn)])
+
+                ike_cfg = self.find_ike_cfg(conn_id)
+                if ike_cfg is None:
+                    ike_cfg = IKEConfig(conn, conn_id)
+
+                self.ike_cfgs.update([(conn_id, ike_cfg)])
+
+                conn.add_ike_cfg(ike_cfg)
+
+
+                tunnel_ids = []
+                if p.get('vti'):
+                    tunnel_ids.append('vti')
+                else:
+                    for tunnel in p['tunnel']:
+                        tunnel_id = tunnel['tagnode']
+                        tunnel_ids.append(tunnel_id)
+
+                for tunnel_id in tunnel_ids:
+                    child_conn_id = '{}{}'.format(prefix, tunnel_id)
+
+                    child_cfg = self.find_child_cfg(child_conn_id)
+                    if child_cfg is None:
+                        child_cfg = ChildConfig(child_conn_id, ike_cfg)
+
+                    ike_cfg.add_child(child_cfg, child_conn_id)
+
+                    self.child_cfgs.update([(child_conn_id, child_cfg)])
+
+        except KeyError as e:
+            err(LOG.EVENT, 'key error exception while loading configuration: {}'.format(e))
+
+
+    def _read_config_ipsec_ra_vpn_client(self, top_cfg):
+
+        def _conv_failover_mode(cli_mode):
+            if cli_mode == 'disable':
+                return FailoverMode.DISABLED
+            elif cli_mode == 'random-start':
+                return FailoverMode.RANDOM_START
+            elif cli_mode == 'sequential':
+                return FailoverMode.SEQUENTIAL
+
+        def _get_backoff_settings(profile_tree):
+
+            backoff_cfg = {
+                Delay.GENERIC_FAILURE: 'servers',
+                Delay.AUTHENTICATION_FAILED: 'auth-failure',
+                Delay.EAP_FAILURE: 'auth-failure',
+                Delay.LAST_SERVER: 'source-interfaces',
+                Delay.RECONNECT: 'reconnect',
+            }
+
+            backoff_dict = {}
+
+            for delay_code, cfg_key in backoff_cfg.items():
+
+                backoff_dict[delay_code] = {}
+
+                try:
+                    backoff_dict[delay_code][Backoff.DELAY] = \
+                            profile_tree['backoff'][cfg_key]['delay']
+                except KeyError:
+                    backoff_dict[delay_code][Backoff.DELAY] = 120
+
+                try:
+                    backoff_dict[delay_code][Backoff.JITTER] = \
+                            profile_tree['backoff'][cfg_key]['jitter']
+                except KeyError:
+                    backoff_dict[delay_code][Backoff.JITTER] = 0
+
+                try:
+                    backoff_dict[delay_code][Backoff.BASE] = \
+                            float(profile_tree['backoff'][cfg_key]['base'])
+                except KeyError:
+                    backoff_dict[delay_code][Backoff.BASE] = 1.0
+
+                try:
+                    backoff_dict[delay_code][Backoff.UPPER_LIMIT] = \
+                            profile_tree['backoff'][cfg_key]['upper-limit']
+                except KeyError:
+                    backoff_dict[delay_code][Backoff.UPPER_LIMIT] = None
+
+            return backoff_dict
+
+        pathmon_configured = False
+        new_path_mon_cfgs = {}
+
+        # IPsec RA VPN client
+        try:
+            profiles = top_cfg['ipsec']['remote-access-client']['profile']
+        except KeyError:
+            profiles = []
+
+
+        try:
+            for p in profiles:
+                profile_conn_id = '{}{}'.format(IPsecRAVPNClient.prefix(), p['profile-name'])
+                profile = self.find_conn(profile_conn_id)
+                if profile is None:
+                    profile = IPsecRAVPNClient(profile_conn_id)
+
+                self.conns.update([(profile_conn_id, profile)])
+
+                try:
+                    profile.failover_mode = _conv_failover_mode(p['failover']['mode'])
+                except KeyError:
+                    pass
+
+                profile.backoff_settings = _get_backoff_settings(p)
+
+                for server in p['server']:
+                    ike_cfgs = []
+                    #
+                    # for each source-interface one dedicated IKEConfig
+                    #
+                    if server.get('source-interface'):
+                        for intf in server.get('source-interface'):
+                            ifname = intf['ifname']
+                            ike_conn_id = '{}-{}-{}'.format(profile_conn_id, ifname,
+                                                            server.get('serveraddr'))
+
+                            source_interface = p.get('source-interface', [])
+                            for profile_intf in source_interface:
+                                if profile_intf.get('source-interface-ref') == ifname:
+                                    ike_prio = profile_intf.get('priority')
+                                    break
+
+
+                            # path-monitor
+                            policy_operator = MonitorPolicyOperator.OR
+                            path_mon = intf.get('path-monitor')
+                            monitors = []
+                            if path_mon:
+
+                                # monitor
+                                cli_monitors = path_mon.get('monitor', [])
+
+                                # only subscribe to pathmon D-Bus signals if there is at least
+                                # one monitor
+                                pathmon_configured = True
+
+                                for monitor in cli_monitors:
+                                    policy = monitor.get('policy', [])
+                                    monitor_name = monitor.get('name')
+
+                                    for mp in policy:
+                                        monitor_policy = mp.get('name')
+                                        if not new_path_mon_cfgs.get((monitor_name,
+                                                                      monitor_policy)):
+                                            new_path_mon_cfgs[(monitor_name, monitor_policy)] = []
+
+                                        new_path_mon_cfgs[(monitor_name, monitor_policy)] \
+                                                          .append(ike_conn_id)
+
+                                        monitors.append((monitor_name, monitor_policy))
+
+
+                                # policy
+                                policy = path_mon.get('policy')
+                                if policy:
+                                    operator = policy.get('operator')
+                                    if operator in ('OR', None):
+                                        policy_operator = MonitorPolicyOperator.OR
+                                    elif operator == 'AND':
+                                        policy_operator = MonitorPolicyOperator.AND
+
+                            # final ike_cfg parameters
+                            ike_cfg = {'conn_id': ike_conn_id,
+                                       'logical_id': profile_conn_id,
+                                       'prio': ike_prio,
+                                       'intf': ifname,
+                                       'policy_operator': policy_operator,
+                                       'monitors': monitors
+                                      }
+
+                            ike_cfgs.append(ike_cfg)
+
+                    else:
+                        ike_conn_id = '{}-{}'.format(profile_conn_id, server.get('serveraddr'))
+                        ike_cfg = {'conn_id': ike_conn_id,
+                                   'logical_id': profile_conn_id,
+                                   'prio': None,
+                                   'intf': None,
+                                   'policy_operator': None,
+                                   'monitors': None,
+                                  }
+                        ike_cfgs.append(ike_cfg)
+
+
+                    #
+                    # Assemble configuration objects
+                    #
+                    for i in ike_cfgs:
+
+
+                        ike_cfg = self.find_ike_cfg(i['conn_id'])
+                        if ike_cfg is None:
+                            ike_cfg = IPsecRAVPNClientIKEConfig(profile, i['conn_id'],
+                                                                i['logical_id'])
+
+                        ike_cfg.priority = i['prio']
+                        ike_cfg.intf = i['intf']
+                        ike_cfg.policy_operator = i['policy_operator']
+                        ike_cfg.monitors = i['monitors']
+
+                        if ike_cfg.priority is None:
+                            ike_cfg.priority = IKE_PRIO_LOWEST
+
+                        self.pathmon_update_ike_cfg(ike_cfg)
+                        self.ike_cfgs.update([(ike_conn_id, ike_cfg)])
+
+                        profile.add_ike_cfg(ike_cfg)
+                        for tunnel in p['tunnel']:
+                            tunnel_id = tunnel['tunnel-id']
+                            child_conn_id = '{}-tunnel-{}'.format(ike_conn_id, tunnel_id)
+                            logical_id = '{}-tunnel-{}'.format(profile_conn_id, tunnel_id)
+                            child_cfg = self.find_child_cfg(child_conn_id)
+                            if child_cfg is None:
+                                child_cfg = IPsecRAVPNClientChildConfig(child_conn_id, ike_cfg,
+                                                                        logical_id)
+
+                            self.child_cfgs.update([(child_conn_id, child_cfg)])
+                            ike_cfg.add_child(child_cfg, child_conn_id)
+                            # introduce also tunnel/CHILD_SA reference refercing the high-level
+                            # profile
+                            self.conn_tunnels.update([(logical_id, profile)])
+
+        except KeyError as e:
+            err(LOG.EVENT, '[CFG] key error exception while loading configuration: {}'.format(e))
+
+        dbg(LOG.EVENT, '[CFG] path-montior configs: {}'.format(self.path_mon_cfgs))
+
+        self.path_mon_cfgs = new_path_mon_cfgs
+
+        if pathmon_configured:
+            dbg(LOG.PATHMON, 'subscribe to pathmon')
+            self._pathmon_subscribe()
+        else:
+            dbg(LOG.PATHMON, 'unsubscribe from pathmon')
+            self._pathmon_unsubscribe()
+
+
+    def read_config(self):
+        with self.lock_config:
+            self._read_config()
+
+
+    @staticmethod
+    def _read_config_get_loglevel(loglevels, cfg_str):
+        try:
+            lvl = loglevels.get(cfg_str)
+            if lvl is None:
+                return None
+
+            cfg_value = lvl['level']
+            return LOGLevel.get(cfg_value)
+        except KeyError:
+            pass
+
+        return None
+
+    def _read_config_logging(self, top_cfg):
+        try:
+            loglevels = top_cfg['ipsec']['logging']['connection-manager']
+        except KeyError:
+            return
+
+        log_all = self._read_config_get_loglevel(loglevels, 'all')
+        if log_all:
+            for n in LOGLevelConfig:
+                LOGLevelConfig[n] = log_all
+
+
+        log_job = self._read_config_get_loglevel(loglevels, 'job')
+        if log_job:
+            LOGLevelConfig[LOG.JOB] = log_job
+
+        log_pathmon = self._read_config_get_loglevel(loglevels, 'pathmon')
+        if log_pathmon:
+            LOGLevelConfig[LOG.PATHMON] = log_pathmon
+
+        log_conn = self._read_config_get_loglevel(loglevels, 'conn')
+        if log_conn:
+            LOGLevelConfig[LOG.CONN] = log_conn
+
+        log_event = self._read_config_get_loglevel(loglevels, 'event')
+        if log_event:
+            LOGLevelConfig[LOG.EVENT] = log_event
+
+    def _read_config(self):
+
+        # Reset loaded config
+        self.conns = OrderedDict()
+        self.conn_tunnels = OrderedDict()
+        self.ike_cfgs = OrderedDict()
+        self.child_cfgs = OrderedDict()
+
+        try:
+            with open(DAEMON_CONF) as fd:
+                top_cfg = json.load(fd)
+        except IOError as e:
+            # (re)boot case
+            dbg(LOG.EVENT, '[CFG] could not get the full tree from configuration file: {}'
+                .format(e))
+            return
+
+        # Logging
+        self._read_config_logging(top_cfg)
+
+        # IPsec RA VPN client
+        self._read_config_ipsec_ra_vpn_client(top_cfg)
+
+        # site-to-site
+        self._read_config_site2site(top_cfg)
+
+        # DMVPN Spoke
+        self._read_config_dmvpn_spoke(top_cfg)
+
+
+        with self.lock_conns_job_queue:
+            # create fo each connection a dedicated PriorityQueue
+            for conn_id in self.conns:
+                if self.conns_job_queue.get(conn_id) is None:
+                    self.conns_job_queue[conn_id] = PriorityQueue()
+
+            # clean stale connection PriorityQueues
+            for queue_conn_id in list(self.conns_job_queue):
+                if self.conns.get(queue_conn_id) is None:
+                    del self.conns_job_queue[queue_conn_id]
+
+        dbg(LOG.EVENT, '[CFG] conns: {}'.format(self.conns))
+        dbg(LOG.EVENT, '[CFG] ike_cfgs: {}'.format(self.ike_cfgs))
+        dbg(LOG.EVENT, '[CFG] child_cfgs: {}'.format(self.child_cfgs))
+
+    def _pathmon_subscribe(self, subscribe=True):
+        if subscribe:
+            method = self.system_bus.add_signal_receiver
+        else:
+            method = self.system_bus.remove_signal_receiver
+
+        method(self.pathmon_state_change_handler, signal_name='state_change',
+               dbus_interface=PATHMON_DBUS_INTERFACE, path=PATHMON_DBUS_PATH)
+
+        method(self.pathmon_clear_policy_state_handler, signal_name='clear_policy_state',
+               dbus_interface=PATHMON_DBUS_INTERFACE, path=PATHMON_DBUS_PATH)
+
+    def _pathmon_unsubscribe(self):
+        self._pathmon_subscribe(subscribe=False)
+
+    def find_conn(self, conn_name):
+        with self.lock_config:
+            ret = self.conns.get(conn_name)
+            if ret:
+                return ret
+            return self.conn_tunnels.get(conn_name)
+
+    def find_ike_cfg(self, conn_id):
+        with self.lock_config:
+            ret = self.ike_cfgs.get(conn_id)
+
+        return ret
+
+    def find_child_cfg(self, conn_id):
+        with self.lock_config:
+            ret = self.child_cfgs.get(conn_id)
+
+        return ret
+
+    def pathmon_update_ike_cfg(self, ike_cfg):
+        with self.lock_pathmon:
+            self._pathmon_update_ike_cfg(ike_cfg)
+
+    def _pathmon_update_ike_cfg(self, ike_cfg):
+        monitor_states = []
+
+        dbg(LOG.PATHMON, 'ike_cfg:{} monitors:{}'.format(ike_cfg.conn_id, ike_cfg.monitors))
+
+        if ike_cfg.monitors is None:
+            return
+
+        for monitor, policy in ike_cfg.monitors:
+            existing_state = self.path_monitor_state.get((monitor, policy))
+            if existing_state != MonitorPolicyStates.UNKNOWN and existing_state is not None:
+                monitor_states.append(existing_state)
+            else:
+                fresh_state = self._pathmon_query_state(monitor, policy)
+
+                if fresh_state != MonitorPolicyStates.UNKNOWN:
+                    ike_cfg.conn.set_path_monitor_mode(True)
+                else:
+                    ike_cfg.conn.set_path_monitor_mode(False)
+
+                self.path_monitor_state[(monitor, policy)] = fresh_state
+                monitor_states.append(fresh_state)
+
+        dbg(LOG.PATHMON, 'monitor_states: {}'.format(monitor_states))
+
+        state = MonitorPolicyStates.UNKNOWN
+        if ike_cfg.policy_operator == MonitorPolicyOperator.AND:
+            if monitor_states.count(MonitorPolicyStates.COMPLIANT) == len(ike_cfg.monitors):
+                state = MonitorPolicyStates.COMPLIANT
+            else:
+                state = MonitorPolicyStates.NON_COMPLIANT
+                dbg(LOG.PATHMON, 'AND operator decided to be non-compliant')
+        elif ike_cfg.policy_operator == MonitorPolicyOperator.OR:
+            if monitor_states.count(MonitorPolicyStates.COMPLIANT) > 0:
+                state = MonitorPolicyStates.COMPLIANT
+            else:
+                state = MonitorPolicyStates.NON_COMPLIANT
+                dbg(LOG.PATHMON, 'OR operator decided to be non-compliant')
+
+        if ike_cfg.monitor_state != state:
+            dbg(LOG.PATHMON, 'pathmon_update_ike_cfg for {}: {} => {}'
+                .format(ike_cfg.conn_id, ike_cfg.monitor_state, state))
+            ike_cfg.monitor_state = state
+
+    def pathmon_state_change_handler(self, *args, **kwargs):
+        del kwargs # unused
+
+        if len(args) != 3:
+            dbg(LOG.PATHMON, 'pathmon: state_change signal has invalid length: {}'
+                .format(len(args)))
+            return
+
+        monitor = args[0]
+        policy = args[1]
+        state = args[2]
+
+        self.schedule(PathMonStateChangeJob(self, monitor, policy, state))
+
+    def pathmon_clear_policy_state_handler(self, *args, **kwargs):
+        del kwargs # unused
+        if args:
+            dbg(LOG.PATHMON, 'pathmon: clear_policy_state signal has invalid length: {}'
+                .format(len(args)))
+            return
+
+        self.schedule(PathMonClearPolicyStateJob(self))
+
+
+    def get_locked_job(self, conn_id):
+        try:
+            with self.lock_conns_job_queue:
+                # queue could be empty, don't block, to release the lock and the worker
+                jq = self.conns_job_queue.get(conn_id)
+                if jq is not None:
+                    job = self._pop_job(job_queue=jq, block=False)
+                else:
+                    return None
+        except Empty:
+            return None
+
+        return job
+
+    def handle_job_locked(self, excep):
+        job = excep.locked_item[-1]
+        job.locked_handler(excep.locked_item)
+
+
+    def _worker_run(self, vs):
+
+        next_job = None
+
+        while True:
+            self.job_queue.log_queue()
+            self.log_conns_job_queue()
+
+            try:
+                if next_job:
+                    job = next_job
+                else:
+                    job = self._pop_job()
+            except JobLockedError as e:
+                self.handle_job_locked(e)
+                dbg(LOG.JOB, 'Job ({}) spotted as locked. Using connection queue.'
+                    .format(e.locked_item[-1]))
+                continue
+
+            # shutdown worker thread
+            if job is None:
+                return False
+
+
+            try:
+                if job.is_removed():
+                    dbg(LOG.JOB, 'Job ({}) spotted as removed. Skipped.'.format(job))
+                    raise SkipJobException()
+
+                if job.is_stale():
+                    dbg(LOG.JOB, 'Job ({}) spotted as stale. Skipped.'.format(job))
+                    raise SkipJobException()
+
+                dbg(LOG.JOB, 'Job {} started'.format(job.name))
+                job.run(vs)
+                dbg(LOG.JOB, 'Job {} completed'.format(job.name))
+            except BrokenPipeError as e:
+                # VICI socket is gone. Probably charon shutdown. shutdown worker thread.
+                return False
+            except SkipJobException:
+                pass
+            except Exception as e: # pylint: disable=broad-except
+                err(LOG.JOB, 'Job ({}) exception occured: {}'.format(job.name, e))
+                tb = traceback.format_exc()
+                err(LOG.JOB, tb)
+            finally:
+                next_job = job.release()
+
+                dbg(LOG.JOB, 'next_job: {}'.format(next_job))
+                self.job_queue.task_done()
+
+
+    def _worker_func(self):
+
+        dbg(LOG.JOB, 'Thread started')
+
+        vs = vici.Session()
+
+        # Handle exceptions, like charon restarts
+        while ipsec_running() and not self.shutdown_event.is_set():
+            try:
+                while self._worker_run(vs):
+                    pass
+            except Exception as e: # pylint: disable=broad-except
+                err(LOG.JOB, 'Thread exception occurred: {}'.format(e))
+                tb = traceback.format_exc()
+                err(LOG.JOB, tb)
+
+
+        dbg(LOG.JOB, 'Thread quit')
+
+    # Listen thread
+    def _listen(self):
+
+        vs = vici.Session()
+
+        for event, event_values in vs.listen(['ike-updown', 'child-updown']):
+
+            if event_values.get('up') == b'yes':
+                self._listen_updown_up(event, event_values)
+            else:
+                self._listen_updown_down(event, event_values)
+
+    def _listen_updown_up(self, event, event_values):
+
+        for conn_id, values in event_values.items():
+            if conn_id == 'up':
+                continue
+
+            ike_state = values.get('state')
+
+            dbg(LOG.EVENT, '[UP] event: {} / IKE state: {} / conn_id: {}'
+                .format(event, ike_state, conn_id))
+
+            if event == b'ike-updown':
+                ike_cfg = self.find_ike_cfg(conn_id)
+
+                if ike_cfg is None:
+                    continue
+
+                dbg(LOG.EVENT, '[UP] received updown signal up for IKE SA: {}'
+                    .format(ike_cfg.conn_id))
+                try:
+                    self._ike_updown_refcount[ike_cfg.conn_id] += 1
+                except KeyError:
+                    self._ike_updown_refcount[ike_cfg.conn_id] = 1
+                dbg(LOG.EVENT, '{} -> IKE SA updown refcount: {}'
+                    .format(ike_cfg.conn_id, self._ike_updown_refcount[ike_cfg.conn_id]))
+
+                ike_cfg.update_state(SAState.ESTABLISHED)
+
+            elif event == b'child-updown':
+                child_cfg = self.find_child_cfg(conn_id)
+
+                if child_cfg is None:
+                    continue
+
+                ike_cfg = child_cfg.ike_cfg
+
+                dbg(LOG.EVENT, '[UP] received updown signal up for CHILD SA: {}'
+                    .format(child_cfg.conn_id))
+
+                child_cfg.update_state(SAState.ESTABLISHED)
+
+    def _listen_updown_down(self, event, event_values):
+
+        for conn_id, values in event_values.items():
+            ike_state = values.get('state')
+            dbg(LOG.EVENT, '[DOWN] event: {} / IKE state: {} / conn_id: {}'
+                .format(event, ike_state, conn_id))
+
+            if event == b'ike-updown':
+                ike_cfg = self.find_ike_cfg(conn_id)
+
+                if ike_cfg is None:
+                    continue
+
+                try:
+                    self._ike_updown_refcount[ike_cfg.conn_id] -= 1
+                    if self._ike_updown_refcount[ike_cfg.conn_id] < 0:
+                        dbg(LOG.EVENT, '[DOWN] IKE SA updown reference accounting got out of'
+                            ' sync!')
+                        raise ValueError
+                except (KeyError, ValueError):
+                    self._ike_updown_refcount[ike_cfg.conn_id] = 0
+
+                dbg(LOG.EVENT, '{} -> IKE SA updown refcount: {}'
+                    .format(ike_cfg.conn_id, self._ike_updown_refcount[ike_cfg.conn_id]))
+                if ike_cfg.state == SAState.ESTABLISHED and \
+                    self._ike_updown_refcount[ike_cfg.conn_id] == 0:
+
+                    ike_cfg.update_state(SAState.INACTIVE)
+
+            elif event == b'child-updown':
+                child_sas = values.get('child-sas')
+                for child_conn_id, _ in child_sas.items():
+
+                    child_cfg = self.find_child_cfg(child_conn_id)
+
+                    if child_cfg is None:
+                        continue
+
+                    child_cfg.update_state(SAState.INACTIVE)
+
+                    ike_cfg = child_cfg.ike_cfg
+                    if ike_cfg.get_state() == SAState.DESTROYING:
+                        dbg(LOG.EVENT, '[DOWN] IKE SA in DESTROYING state. Ignoring.')
+                        continue
+
+                    job = InitiateJob(self, child_cfg)
+                    delay = child_cfg.get_delay(Delay.RECONNECT)
+                    notice(LOG.EVENT, '[DOWN] scheduling delayed initiate job for CHILD SA {} '
+                           'in {} seconds.'.format(child_cfg.conn_id, delay))
+                    self.schedule(job, delay=delay)
+
+    def _listen_func(self):
+
+        dbg(LOG.EVENT, 'Thread started')
+
+        # Handle exceptions, like charon restarts
+        while ipsec_running() and not self.shutdown_event.is_set():
+            try:
+                self._listen()
+            # VICI socket vanished
+            except IOError:
+                pass
+            except Exception as e: # pylint: disable=broad-except
+                err(LOG.EVENT, 'Thread exception occurred: {}'.format(e))
+                tb = traceback.format_exc()
+                err(LOG.EVENT, tb)
+                # delay restart if frequent exceptions occur, to avoid a busy loop
+                time.sleep(THREAD_CYCLE_DELAY)
+
+        dbg(LOG.EVENT, 'Thread quit')
+        _thread.interrupt_main()
+
+
+    def add_job(self, job, prio, job_queue=None):
+
+        dbg(LOG.JOB, 'add_job: {} / prio: {} / job_queue: {}'.format(job, prio, job_queue))
+
+        job.remove_job()
+
+        # https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes
+        # entry count avoids comparsion breakage
+        with self.job_count_lock:
+            _count = next(self.job_count)
+
+        job_args = [prio, _count, job]
+
+        job.add_job(job_args)
+
+        if job_queue is None:
+            job_queue = self.job_queue
+
+        job_queue.put(job_args)
+
+    def remove_updown_job(self, key):
+        job_index = self.job_index_updown
+        if key not in job_index:
+            return
+
+        existing_job_args = job_index[key]
+        job = existing_job_args[-1]
+        job.set_removed()
+
+    def remove_pm_job(self, key):
+        job_index = self.job_index_pm_state_change
+        if key not in job_index:
+            return
+
+        existing_job_args = job_index[key]
+        job = existing_job_args[-1]
+        job.set_removed()
+
+    def _pop_job(self, job_queue=None, block=True):
+        conn_id = None
+
+        if job_queue is None:
+            job_queue = self.job_queue
+
+        _, _, job = job_queue.get(block=block)
+
+        job.delete_job()
+
+        # Cancel delayed UpDown jobs
+        if conn_id in self.event_index_updown:
+            del self.event_index_updown[conn_id]
+
+        return job
+
+    def schedule(self, job, prio=JOB_PRIO_NORMAL, delay=None):
+
+        dbg(LOG.JOB, 'schedule: {} / prio: {} / delay: {}'.format(job, prio, delay))
+
+        if not delay:
+            self.add_job(job, prio)
+            return
+
+        self.scheduler_cond.acquire()
+
+        event = self.scheduler.enter(delay, prio, self.add_job, (job, prio))
+
+        job.set_event(event)
+
+        self.scheduler_cond.notify()
+        self.scheduler_cond.release()
+
+    def _scheduler_func(self):
+
+        dbg(LOG.EVENT, 'Thread started')
+
+        # Handle exceptions, like charon restarts
+        while ipsec_running() and not self.shutdown_event.is_set():
+            self.scheduler_cond.acquire()
+            if self.scheduler.empty():
+                self.scheduler_cond.wait()
+
+            self.scheduler_cond.release()
+
+            # scheduler returns when queue is empty
+            self.scheduler.run()
+
+        dbg(LOG.EVENT, 'Thread quit')
+
+    def dump_conns_job_queue(self):
+        with self.lock_conns_job_queue:
+            ret = ''
+            for q in self.conns_job_queue:
+                ret += '{}: {};'.format(q, self.conns_job_queue[q].queue)
+            return ret
+
+    def log_conns_job_queue(self):
+        if dbg_enabled(LOG.JOB):
+            dbg(LOG.JOB, 'conns_job_queue: {}'.format(self.dump_conns_job_queue()))
+
+    def show_debug(self):
+
+        stats = OrderedDict()
+        stats.update([('conns', self.conns)])
+        stats.update([('ike_cfgs', self.ike_cfgs)])
+        stats.update([('child_cfgs', self.child_cfgs)])
+        stats.update([('path_mon_cfgs', self.path_mon_cfgs)])
+        stats.update([('job_queue', self.job_queue.queue)])
+        stats.update([('conns_job_queue', self.dump_conns_job_queue())])
+        stats.update([('path_monitor_state', self.path_monitor_state)])
+        stats.update([('path_monitor_mode', self.path_monitor_mode)])
+
+        stats.update([('ike_updown_refcount', self._ike_updown_refcount)])
+
+        return ppformat(stats)
+
+if __name__ == '__main__':
+
+    syslog.openlog(DAEMON_NAME, facility=syslog.LOG_DAEMON)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    dbus.mainloop.glib.threads_init()
+
+    d = Daemon()
+    d.run()

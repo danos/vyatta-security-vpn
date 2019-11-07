@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+syntax:expression: $VAR(@) == "pre-shared-secret" || ( exec "test -f /opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/dmvpn-auth-x509" && $VAR(@) == "x509" ) ; "must be a supported authentication method for DMVPN"

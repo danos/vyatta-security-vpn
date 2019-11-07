@@ -1,0 +1,4 @@
+help: Show all currently active IKE Security Associations (SA)
+run:
+    vyatta-op-vpn.pl --show-ike-sa
+    vyatta-op-vpn-ipsec-vici --show-ike-sa=brief

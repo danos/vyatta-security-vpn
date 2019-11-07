@@ -1,0 +1,4 @@
+vyatta-security-vpn: unusual-interpreter opt/vyatta/share/tmplscripts/*
+vyatta-security-vpn: dir-or-file-in-opt
+vyatta-security-vpn: file-in-unusual-dir
+

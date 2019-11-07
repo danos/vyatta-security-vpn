@@ -1,0 +1,9 @@
+[Vyatta Component]
+Name=net.vyatta.vci.ipsec
+Description=VCI component for IPsec features
+ExecName=/lib/vci-security-vpn-ipsec/vci-security-vpn-ipsec
+ConfigFile=/etc/vci-security-vpn-ipsec.conf
+
+[Model net.vyatta.vci.ipsec.v1]
+Modules=vyatta-security-vpn-ipsec-v1,vyatta-security-vpn-ipsec-remote-access-server-v1
+ModelSets=vyatta-v1

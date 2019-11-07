@@ -1,0 +1,2 @@
+help: secp521r1 (aka. P-521) curve
+run: /opt/vyatta/sbin/vyatta-gen-x509-keypair.sh $5 ecdsa secp521r1

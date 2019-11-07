@@ -1,0 +1,157 @@
+Source: vyatta-security-vpn
+Section: net
+Priority: optional
+Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
+Build-Depends:
+ cpio,
+ debhelper (>= 9),
+ debhelper (>= 9.20160709) | dh-systemd,
+ debhelper (>= 9.20160403~) | dh-autoreconf,
+ dh-python,
+ dh-yang,
+ dh-vci,
+ libconvert-asn1-perl,
+ libcrypt-openssl-rsa-perl,
+ libfile-slurp-perl,
+ libio-string-perl,
+ libipc-system-simple-perl,
+ libjson-perl,
+ libnfnetlink-dev,
+ libreadonly-perl,
+ libtest-exception-perl,
+ libtest-mockobject-perl,
+ libperl-critic-perl,
+ netbase,
+ perl (>= 5.8.9),
+ pylint3,
+ python3,
+ python3-dbus,
+ python3-gi,
+ python3-vci,
+ python3-vici
+Standards-Version: 3.9.6
+
+Package: vyatta-security-vpn
+Conflicts: vyatta-cfg-vpn, vyatta-op-vpn, vyatta-op (<< 0.21)
+Replaces: vyatta-cfg-vpn, vyatta-op-vpn, vyatta-op (<< 0.21)
+Architecture: any
+Depends:
+ chvrf,
+ curl,
+ iproute2 (>= 3.16.0),
+ libconvert-asn1-perl,
+ libcrypt-openssl-rsa-perl,
+ libcrypt-openssl-x509-perl,
+ libfile-slurp-perl,
+ libipc-system-simple-perl,
+ libjson-perl,
+ libreadonly-perl,
+ libstrongswan-standard-plugins,
+ libstrongswan-extra-plugins (>= 5.6.3-0vyatta5),
+ libcharon-extra-plugins,
+ python3,
+ python3-dbus,
+ python3-gi,
+ python3-vci,
+ python3-vici (>= 5.3.0),
+ python3-vplaned,
+ strongswan (>= 5.3.0),
+ strongswan-swanctl,
+ vyatta-cfg (>= 0.117),
+ vyatta-op,
+ vyatta-service-dhcp-client,
+ vyatta-ipsec-trapd,
+ xtables-addons-bypass,
+ ${misc:Depends},
+ ${perl:Depends},
+ ${shlibs:Depends},
+ libvyatta-dataplane-proto-support
+Suggests:
+ ethtool,
+ ncurses-bin (>= 5.5-5),
+ net-tools,
+ ntpdate,
+ util-linux (>= 2.13-5)
+Description: Vyatta VPN configuration templates and scripts.
+ Vyatta operational commands for VPN
+ Vyatta commands to operate openswan VPN.
+
+Package: vyatta-security-vpn-ipsec-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ ${misc:Depends},
+ ${yang:Depends}
+Replaces: vyatta-security-vpn (<< 0.4)
+Breaks: vyatta-security-vpn (<< 0.4)
+Description: vyatta-security-vpn-ipsec-v1 module
+ The YANG module for vyatta-security-vpn-ipsec-v1
+
+Package: vyatta-security-vpn-ipsec-vfp-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-security-vpn-ipsec-vfp-v1 module
+ The YANG module for vyatta-security-vpn-ipsec-vfp-v1
+
+Package: vyatta-security-vpn-ipsec-path-monitor-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ monitord-feature-dbus (>= 6.5.0),
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-security-vpn-ipsec-path-monitor-v1 module
+ The YANG module for vyatta-security-vpn-ipsec-path-monitor-v1
+
+Package: vyatta-security-vpn-ipsec-remote-access-server-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-security-vpn-ipsec-remote-access-server-v1 module
+ The YANG module for vyatta-security-vpn-ipsec-remote-access-server-v1
+
+Package: vyatta-ipsec-remote-access-server-feature
+Architecture: all
+Depends: ${misc:Depends},
+ vyatta-security-vpn-ipsec-remote-access-server-v1-yang (>= ${source:Version}),
+ vyatta-op-reset-vpn-ipsec-remote-access-server-v1-yang (>= ${source:Version}),
+ vyatta-op-clear-vpn-x509-v1-yang (>= ${source:Version}),
+ vci-security-vpn-ipsec
+Section: contrib/net
+Priority: optional
+Description: Vyatta IPsec remote access server feature flag
+ The feature flag for the IPsec remote access server feature
+
+Package: vci-security-vpn-ipsec
+Architecture: any
+Depends:
+  python3,
+  vyatta-security-vpn (>= ${source:Version}),
+  ${shlibs:Depends},
+  ${misc:Depends},
+  ${python3:Depends}
+Description: IPsec VCI Component
+ Component to handle requests for IPsec features
+
+Package: vyatta-op-reset-vpn-ipsec-remote-access-server-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-op-reset-vpn-ipsec-remote-access-server-v1 module
+ The YANG module for vyatta-op-reset-vpn-ipsec-remote-access-server-v1
+
+Package: vyatta-op-clear-vpn-x509-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn (>= ${source:Version}),
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-op-clear-vpn-x509-v1 module
+ The YANG module for vyatta-op-clear-vpn-x509-v1

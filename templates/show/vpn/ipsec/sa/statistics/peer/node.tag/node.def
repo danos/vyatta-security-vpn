@@ -1,0 +1,9 @@
+help: Show stats for all active IPsec Security Associations (SA) for a peer
+allowed:
+        vyatta-op-vpn.pl --get-peers-for-cli
+        vyatta-op-vpn-ipsec-vici --get-ra-client-peers-for-cli
+        vyatta-op-vpn-ipsec-vici --get-ra-server-peers-for-cli
+
+run:
+        vyatta-op-vpn.pl --show-ipsec-sa-stats-peer="$7"
+        vyatta-op-vpn-ipsec-vici --show-ipsec-sa-stats-peer="$7"

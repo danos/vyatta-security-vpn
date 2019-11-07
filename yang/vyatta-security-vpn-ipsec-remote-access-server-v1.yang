@@ -1,0 +1,291 @@
+module vyatta-security-vpn-ipsec-remote-access-server-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-security-vpn-ipsec-remote-access-server:1";
+	prefix vyatta-security-vpn-ipsec-remote-access-server-v1;
+
+	import vyatta-security-v1 {
+		prefix security;
+	}
+	import vyatta-security-vpn-ipsec-v1 {
+		prefix ipsec;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "AT&T Inc.";
+	contact
+		"AT&T
+		 Postal: 208 S. Akard Street
+		         Dallas, TX 25202
+		 Web: www.att.com";
+
+	description
+		"Copyright (c) 2018-2019, AT&T Intellectual Property.
+		 All rights reserved.
+
+		 Redistribution and use in source and binary forms, with or
+		 without modification, are permitted provided that the following
+		 conditions are met:
+
+		 1. Redistributions of source code must retain the above copyright
+			notice, this list of conditions and the following disclaimer.
+		 2. Redistributions in binary form must reproduce the above
+			copyright notice, this list of conditions and the following
+			disclaimer in the documentation and/or other materials provided
+			with the distribution.
+		 3. Neither the name of the copyright holder nor the names of its
+			contributors may be used to endorse or promote products derived
+			from this software without specific prior written permission.
+
+		 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+		 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+		 LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+		 FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+		 COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+		 INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+		 BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+		 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+		 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+		 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+		 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+		 POSSIBILITY OF SUCH DAMAGE.
+
+		 SPDX-License-Identifier: BSD-3-Clause
+
+		 The YANG module for vyatta-security-vpn-ipsec-remote-access-server-v1";
+
+	revision 2019-03-26 {
+		description "Initial revision.";
+	}
+
+	feature ipsec_ra_server {
+		description "Remote access server configuration";
+	}
+
+	grouping uses-remote-access-server {
+		container remote-access-server {
+			if-feature ipsec_ra_server;
+			presence "IPsec remote access server configuration";
+			description "Configures the remote access server parameters";
+			configd:help "Remote access server VPN";
+			list pool {
+				description "Configures an IP pool for remote access server usage";
+				configd:help "IP pool";
+				min-elements 1;
+				max-elements 8;
+				key "pool-ref";
+				leaf pool-ref {
+					description "Configures the name of the IP pool";
+					configd:help "Pool name";
+					type string {
+						length 1..255;
+					}
+				}
+				leaf description {
+					description "Provides the description of the IP pool.";
+					type string {
+						length 1..255;
+					}
+					configd:help "IP pool description";
+				}
+				leaf subnet {
+					description "Configures the IPv4 or IPv6 subnet of the IP pool.";
+					configd:help "Subnet of pool";
+					type union {
+						type types:ipv4-prefix;
+						type types:ipv6-prefix;
+					}
+				}
+			}
+			list profile {
+				description "Configures the profile for remote access server";
+				configd:help "Remote access server VPN profile";
+				min-elements 1;
+				max-elements 8;
+				key "profile-name";
+				leaf profile-name {
+					description "Configures profile name for remote access server";
+					type string {
+						length 1..255;
+					}
+					configd:help "Remote access server VPN profile";
+				}
+				container authentication {
+					description "Configures authentication parameters for remote access server";
+					configd:help "Authentication";
+					leaf mode {
+						description "Configures the mode of authentication";
+						type enumeration {
+							enum "x509" {
+								description "Configures authentication mode as X.509";
+								configd:help "Use X.509 authentication";
+							}
+						}
+						configd:help "Authentication mode";
+						mandatory true;
+					}
+					leaf reauth-time {
+						description "Configures the reauthentication time.";
+						configd:help "Reauthentication time in seconds";
+						type uint32 {
+							range 60..86400;
+						}
+					}
+					container x509 {
+						presence "X.509 authentication parameters";
+						configd:help "X.509 authentication parameters";
+			
+						container key {
+							configd:help "Private key and password";
+							leaf password {
+								type string;
+								configd:secret "true";
+								configd:help "Password that protects the private key";
+							}
+							leaf file {
+								type string {
+									configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/peer/authentication/x509/key/file/configd_syntax1.cli";
+								}
+								configd:help "Private key for the X.509 certificate for this server profile";
+							}
+						}
+						leaf cert-file {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/peer/authentication/x509/cert-file/configd_syntax1.cli";
+							}
+							configd:help "X.509 certificate for this server profile";
+						}
+						leaf revocation-policy {
+							description "Configures the revocation policy for OCSP or CRL revocation.
+
+								     * relaxed: relaxed revocation policy is the default and does not fail if
+								       certificate status is not available.
+
+								     * strict: strict revocation policy fails if no certificate status is
+								       available.";
+							type enumeration {
+								enum "relaxed" {
+									description "Configures relaxed revocation policy";
+									configd:help "relaxed revocation policy";
+								}
+								enum "strict" {
+									description "Configures strict revocation policy";
+									configd:help "strict revocation policy";
+								}
+							}
+							configd:help "Revocation policy";
+							default "relaxed";
+						}
+					}
+			
+				}
+				leaf description {
+					description "Provides the description for remote access server profile";
+					type string {
+						length 1..255;
+					}
+					configd:help "Remote access server VPN profile description";
+				}
+				list tunnel {
+					description "Configures the list of tunnels for the remote access server";
+					min-elements 1;
+					max-elements 32;
+					configd:help "Remote tunnel";
+					key "tunnel-id";
+					leaf tunnel-id {
+						description "Configures the id of tunnel";
+						type uint32;
+						configd:help "Remote tunnel id";
+					}
+					container local {
+						description "Configures local parameters for the tunnel";
+						configd:help "Local parameters for interesting traffic";
+						leaf network {
+							description "Configures local network for the tunnel";
+							type union {
+								type types:ipv4-prefix;
+								type types:ipv6-prefix;
+							}
+							configd:help "Local IPv4 or IPv6 network";
+						}
+					}
+					container remote {
+						description "Configures remote parameters for the tunnel";
+						configd:help "Remote parameters for interesting traffic";
+						leaf network {
+							description "Configures remote network for the tunnel";
+							type union {
+								type types:ipv4-prefix;
+								type types:ipv6-prefix;
+							}
+							configd:help "Remote IPv4 or IPv6 network";
+						}
+					}
+				}
+				leaf local-address {
+					description "Configures local address for remote access server";
+					type union {
+						type types:ipv4-address;
+						type types:ipv6-address;
+						type ipsec:any-keyword;
+					}
+					configd:help "IPv4, IPv6 or any address of a local interface to use for remote access VPN";
+				}
+				uses ipsec:esp-group-name {
+					refine esp-group {
+						mandatory true;
+					}
+				}
+				uses ipsec:ike-group-name {
+					refine ike-group {
+						mandatory true;
+					}
+				}
+				leaf force-udp-encap {
+					type empty;
+					description "Force UDP encapsulation of ESP packets. This applies to all client connections
+						    for this server profile.";
+					configd:help "Force UDP encapsulation";
+				}
+				list pools {
+					description "Configures list of IP pools to use for this server profile.
+						     Currently 4 IP pools per server profile are supported.";
+					configd:help "IP pools";
+					max-elements 4;
+					ordered-by "user";
+					key "poolname";
+					leaf poolname {
+						description "Assign IP pool to this server profile. Multiple profiles can reference the same IP pools.";
+						configd:help "IP pool name";
+						type leafref {
+							path "../../../pool/pool-ref";
+						}
+					}
+				}
+			}
+		}
+	}
+
+	augment /security:security/ipsec:vpn/ipsec:ipsec {
+		uses uses-remote-access-server;
+	}
+
+	rpc reset-client {
+		description "Disconnect clients from the IPsec RA VPN server.";
+		input {
+			leaf profile {
+				description "IPsec RA VPN server profile to perform client reset/disconnect operation on.";
+				type string;
+			}
+			leaf peer {
+				description "Client IP address or client's remote id which should be reset/disconnected.";
+				type string;
+			}
+		}
+	}
+
+
+}

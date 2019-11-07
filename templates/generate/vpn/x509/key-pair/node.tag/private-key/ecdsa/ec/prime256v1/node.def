@@ -1,0 +1,2 @@
+help: prime256v1 (aka. secp256r1 or P-256) curve
+run: /opt/vyatta/sbin/vyatta-gen-x509-keypair.sh $5 ecdsa prime256v1

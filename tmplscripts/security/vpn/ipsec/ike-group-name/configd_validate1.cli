@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) in $VAR(/security/vpn/ipsec/ike-group/@@) ; "IKE group '$VAR(@)' does not exist"

@@ -1,0 +1,470 @@
+#!/usr/bin/perl -w
+#
+# Module: vyatta-s2s-config
+#
+# **** License ****
+# Copyright (c) 2018-2019 AT&T Intellectual Property.
+# All rights reserved.
+#
+# Copyright (c) 2016-2017 Brocade Communications Systems, Inc.
+# All Rights Reserved.
+#
+# This code was originally developed by Vyatta, Inc.
+# Portions created by Vyatta are Copyright (C) 2016 Vyatta, Inc.
+# All Rights Reserved.
+#
+# **** End License ****
+#
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# For each s2s tunnel add/del iptables rule when tunnel goes up/down
+#
+
+use strict;
+use warnings;
+use lib "/opt/vyatta/share/perl5";
+
+use Getopt::Long;
+use File::Slurp;
+use File::Path qw(mkpath);
+use Socket qw(AF_INET AF_INET6 inet_pton);
+use Vyatta::VPN::Constants qw( VFP_STATE_DIR );
+use Vyatta::VPlaned;
+
+use vyatta::proto::CryptoPolicyConfig;
+
+my $debug = 0;
+
+my $updown      = "";
+my $peer        = "";
+my $peerclient  = "";
+my $myclient    = "";
+my $action      = "";
+my $af          = "";
+my $proto       = "";
+my $lport       = "";
+my $rport       = "";
+my $overlay_vrf = "";
+my $interface   = "";
+my $connection  = "";
+my $reqid       = "";
+
+GetOptions(
+    "updown"        => \$updown,
+    "peer=s"        => \$peer,
+    "peercl=s"      => \$peerclient,
+    "mycl=s"        => \$myclient,
+    "action=s"      => \$action,
+    "af=s"          => \$af,
+    "proto=s"       => \$proto,
+    "lport=s"       => \$lport,
+    "rport=s"       => \$rport,
+    "overlay_vrf=s" => \$overlay_vrf,
+    "interface=s"   => \$interface,
+    "connection=s"  => \$connection,
+    "reqid=s"       => \$reqid,
+);
+
+#
+# --updown --peer=<peer> --peercl=<pclient> --mycl=<myclient>
+# --action=[up|down] --af=[4|6]
+#
+if ( $updown ne '' ) {
+    if ( !( defined $action ) || $action eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+    if ( !( defined $peer ) || $peer eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+    if ( !( defined $peerclient ) || $peerclient eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+    if ( !( defined $myclient ) || $myclient eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+    if ( !( defined $af ) || $af eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+
+# Obtain the master ifindex from the lo interface, in case the default VRF is configured.
+    if ( $overlay_vrf eq 'default' or $overlay_vrf eq '' ) {
+        $overlay_vrf = 'lo';
+    }
+
+    # Handle the undefined interface case
+    if ( $interface eq '' ) {
+        $interface = undef;
+    }
+
+    if ( !( defined $connection ) || $connection eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+
+    if ( !( defined $reqid ) || $reqid eq '' ) {
+
+        # invalid
+        exit -1;
+    }
+
+    my $vyatta_s2s_config_tmpdir = '/tmp/vyatta-s2s-config/';
+
+    my $vfp_ifname;
+    my $vfp_ifname_fn = VFP_STATE_DIR . $connection;
+    $vfp_ifname_fn .= ".prev" if ( !-f $vfp_ifname_fn );
+
+    chomp( $vfp_ifname = read_file($vfp_ifname_fn) )
+      if ( -f $vfp_ifname_fn );
+
+    my $vfp_ifindex;
+    my $vfp_ifindex_fn =
+      $vyatta_s2s_config_tmpdir . 'vfp.ifi.' . $connection . '.' . $reqid;
+
+    if ( $action eq 'down' ) {
+        if ( -f $vfp_ifindex_fn ) {
+            chomp( $vfp_ifindex = read_file($vfp_ifindex_fn) );
+            unlink $vfp_ifindex_fn;
+        }
+    }
+    elsif ( defined $vfp_ifname ) {
+        $vfp_ifindex =
+          read_file( '/sys/class/net/' . $vfp_ifname . '/ifindex' );
+        mkpath($vyatta_s2s_config_tmpdir);
+        write_file( $vfp_ifindex_fn, $vfp_ifindex );
+    }
+
+    chomp( my $vrf_id =
+          read_file( '/sys/class/net/' . $overlay_vrf . '/ifindex' ) );
+
+    # The order of the MARK rule is important. Needs to come before
+    # BYPASS rule.
+    s2s_handle_updown_overlay_vrf_mark(
+        $peer,  $peerclient, $myclient, $action,    $af,
+        $proto, $lport,      $rport,    $interface, $overlay_vrf
+    );
+
+    s2s_handle_updown_bypass(
+        $peer,  $peerclient, $myclient, $action,    $af,
+        $proto, $lport,      $rport,    $interface, $connection
+    );
+
+    if ( defined $vfp_ifname and defined $vfp_ifindex ) {
+        my ( $raddr, $rmask ) = split_addr_mask($peerclient);
+        my ( $laddr, $lmask ) = split_addr_mask($myclient);
+        my $sel_if = undef;
+
+        # 'lo' stands for the default VRF
+        if ( $overlay_vrf ne 'lo' ) {
+            $sel_if = $vfp_ifindex;
+        }
+
+        my $cstore_config =
+"$vfp_ifindex $vrf_id $raddr/$rmask $laddr/$lmask $rport $lport $proto $vfp_ifname";
+
+	my $cstore_config_raddr;
+	if ($af == 4) {
+	    $cstore_config_raddr = IPAddress->new(
+		{
+		    ipv4_addr => unpack("I", inet_pton(AF_INET, $raddr)),
+		}
+		);
+	}
+	else {
+	    $cstore_config_raddr = IPAddress->new(
+		{
+		    ipv6_addr => inet_pton(AF_INET6, $raddr),
+		}
+		);
+	}
+	my $cstore_config_laddr;
+	if ($af == 4) {
+	    $cstore_config_laddr = IPAddress->new(
+		{
+		    ipv4_addr => unpack("I", inet_pton(AF_INET, $laddr)),
+		}
+		);
+	}
+	else {
+	    $cstore_config_laddr = IPAddress->new(
+		{
+		    ipv6_addr => inet_pton(AF_INET6, $laddr),
+		}
+		);
+	}
+
+        my $cstore_config_pb = CryptoPolicyConfig->new(
+            {
+                action          => CryptoPolicyConfig::Action::ATTACH,
+                ifindex         => $vfp_ifindex,
+                vrf             => $vrf_id,
+                sel_daddr       => $cstore_config_raddr,
+                sel_dprefix_len => $rmask,
+                sel_saddr       => $cstore_config_laddr,
+                sel_sprefix_len => $lmask,
+                sel_dport       => $rport,
+                sel_sport       => $lport,
+                sel_proto       => $proto,
+                sel_ifindex     => $vfp_ifname,
+            }
+        );
+        s2s_handle_vfp( $action, $cstore_config, $sel_if, $cstore_config_pb );
+        if ( $action eq 'down' ) {
+            unlink $vfp_ifname_fn if ( $vfp_ifname_fn =~ /prev$/ );
+        }
+    }
+
+    exit 0;
+}
+
+#
+# Passthrough connection requires an iptables rule to avoid the .spathintf
+# for the local network.
+#
+sub s2s_update_passthrough {
+    my ( $af, $mycl, $action ) = @_;
+
+    my @cmd = ( $af eq '4' ) ? ("/sbin/iptables") : ("/sbin/ip6tables");
+
+    if ( $action eq 'up' ) {
+        push @cmd, ( "--insert", "OUTPUT", "1" );
+    }
+    else {
+        push @cmd, ( "--delete", "OUTPUT" );
+    }
+
+    push @cmd,
+      (
+        "--table",  "mangle", "--jump",        "ACCEPT",
+        "--source", "$mycl",  "--destination", "$mycl"
+      );
+
+    system(@cmd) == 0
+      or print STDERR "Error $? $action  passthrough iptables rule\n";
+}
+#
+# Handle S2S tunnel state based on input from strongswan and configuration.
+#
+sub s2s_handle_updown_bypass {
+
+    my (
+        $peer,  $pcl,   $mycl,  $action,    $af,
+        $proto, $lport, $rport, $interface, $connection
+    ) = @_;
+
+    my $iptables = "OUTPUT --table mangle --jump BYPASS";
+    $iptables .= " --source $myclient --destination $peerclient";
+
+    my $act;
+
+    if ($proto) {
+        $iptables .= " --proto $proto";
+        if ($lport) {
+            $iptables .= " --source-port $lport";
+        }
+        if ($rport) {
+            $iptables .= " --destination-port $rport";
+        }
+        elsif ( $proto eq '17' ) {
+            $iptables .= " -m multiport ! --destination-port 500,4500";
+        }
+    }
+
+    $iptables .= " --oif .spathintf";
+    if ( defined $interface ) {
+        $iptables .= " --out-interface $interface";
+    }
+    if ( $action eq 'up' ) {
+        $act = "--append";
+    }
+    else {
+        $act = "--delete";
+    }
+    my $cmd = ( $af eq '4' ) ? "iptables" : "ip6tables";
+    $cmd .= " $act $iptables";
+
+    my $out = `$cmd 1>/dev/null 2>&1`;
+    if ($?) {
+        print STDERR "bind iptables: $cmd failed: $out\n";
+    }
+
+    my $pp = `grep -q "^conn passthrough-${connection}\$" /etc/ipsec.conf`;
+    if ( !$? ) {
+        s2s_update_passthrough( $af, $mycl, $action );
+    }
+    return;
+}
+
+#
+# Overlay VRF specific rules
+#
+sub s2s_handle_updown_overlay_vrf_mark {
+    my (
+        $peer,  $pcl,   $mycl,  $action,    $af,
+        $proto, $lport, $rport, $interface, $overlay_vrf
+    ) = @_;
+
+    my $iptables = "OUTPUT --table mangle --jump MARK";
+
+    my $mark;
+    if ( defined $interface ) {
+        chomp( $mark =
+              read_file( '/sys/class/net/' . $interface . '/ifindex' ) );
+    }
+    else {
+        chomp( $mark =
+              read_file( '/sys/class/net/' . $overlay_vrf . '/ifindex' ) );
+    }
+    $iptables .= " --set-mark $mark";
+
+    if ( defined $interface ) {
+        $iptables .= " --out-interface $interface";
+    }
+    $iptables .= " --source $myclient --destination $peerclient";
+
+    my $act;
+
+    if ($proto) {
+        $iptables .= " --proto $proto";
+        if ($lport) {
+            $iptables .= " --source-port $lport";
+        }
+        if ($rport) {
+            $iptables .= " --destination-port $rport";
+        }
+        elsif ( $proto eq '17' ) {
+            $iptables .= " -m multiport ! --destination-port 500,4500";
+        }
+    }
+
+    # The order of the MARK rule is important. Needs to come before
+    # BYPASS rule.
+    if ( $action eq 'up' ) {
+        $act = "--insert";
+    }
+    else {
+        $act = "--delete";
+    }
+    my $cmd = ( $af eq '4' ) ? "iptables" : "ip6tables";
+    $cmd .= " $act $iptables";
+    my $out = `$cmd 1>/dev/null 2>&1`;
+    if ($?) {
+        print STDERR "bind iptables: $cmd failed: $out\n";
+    }
+    return;
+
+}
+
+#
+# VFP helpers
+#
+sub split_addr_mask {
+    my ( $addr, $family ) = @_;
+
+    # split address and mask for src/dst addresses
+    if ( $addr =~ /([^\/]+)\/([^\/]+)/ ) {
+        return ( $1, $2 );
+    }
+    else {
+
+        # should be "any"
+        if ( $addr ne "any" ) {
+            print STDERR "Unexpected address and mask len: $addr\n";
+        }
+        if ( $family == 4 ) {
+            return ( "0.0.0.0", "0" );
+        }
+        else {
+            return ( "::", "0" );
+        }
+    }
+}
+
+sub s2s_handle_vfp {
+    my ( $action, $cstore_config, $sel_if, $cstore_config_pb ) = @_;
+    my $cstore = new Vyatta::VPlaned;
+
+    if ( $action eq 'up' ) {
+        send_vfp_cmd( $cstore, 'SET', $cstore_config );
+        send_bind_cmd( $cstore, 'SET', $cstore_config, $sel_if,
+            $cstore_config_pb );
+    }
+    else {
+        send_vfp_cmd( $cstore, 'DELETE', $cstore_config );
+        send_bind_cmd( $cstore, 'DELETE', $cstore_config, $sel_if,
+            $cstore_config_pb );
+    }
+}
+
+# Mark or unmark a vfp as being in use as a s2s feature attachment point.
+#
+# vfp <ifindex> <ifname> s2s get|put
+#
+sub send_vfp_cmd {
+    my ( $cstore, $action, $config ) = @_;
+    my $vfp_action = "put";
+
+    # ifname is last word in config
+    my ($ifname) = $config =~ /(\w+)$/;
+
+    # ifindex is first word in config
+    my ($ifindex) = $config =~ /^(\w+)/;
+
+    if ( $action eq "SET" ) {
+        $vfp_action = "get";
+    }
+
+    print("  CSTORE: KEY vfp $ifindex $ifname s2s\n")
+      if $debug > 1;
+    print("  CSTORE: CMD vfp $ifindex $ifname s2s $vfp_action\n")
+      if $debug > 0;
+    $cstore->store(
+        "vfp $ifindex $ifname s2s", "vfp $ifindex $ifname s2s $vfp_action",
+        undef,                      "$action"
+    );
+}
+
+# Bind or unbind a vfp and s2s crypto policy.
+#
+# s2s attach|detach <ifindex> <vrf> <dst addr> <dst addrlen>
+#                                   <src addr> <src addrlen>
+#                                   <dst port <src port> <proto> <sel if>
+sub send_bind_cmd {
+    my ( $cstore, $action, $config, $sel_if, $config_pb ) = @_;
+    my $s2s_action = "detach";
+
+    if ( $action eq "SET" ) {
+	$config_pb->{action} = CryptoPolicyConfig::Action::ATTACH;
+    }
+    else {
+	$config_pb->{action} = CryptoPolicyConfig::Action::DETACH;
+    }
+
+    # ifname is last word in config and not needed
+    $config =~ s/(\w+)$//;
+    if ( defined($sel_if)
+        and
+        -f '/opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/ipsec-overlay-vrf-support'
+      )
+    {
+        $config = "$config $sel_if";
+    }
+
+    print("  CSTORE: KEY s2s $config\n")
+      if $debug > 1;
+    print("  CSTORE: CMD s2s $s2s_action $config\n")
+      if $debug > 0;
+    $cstore->store_pb( "s2s $config", $config_pb, "vyatta:crypto-policy",
+        undef, "$action" );
+}
+

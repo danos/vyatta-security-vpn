@@ -1,0 +1,9 @@
+The Debian Package vyatta-security-vpn 
+------------------------------=-------
+
+This package has the source for the binary vpn packages below.
+
+This package has the CLI template for the vpn commands
+This package has the Vyatta VPN configuration templates and scripts.
+
+

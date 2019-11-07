@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: exec "test $VAR(hash/@) == null && echo 'Warning: null hash is no longer supported for IKE-group.' || true";""

@@ -1,0 +1,3 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) != "pre-shared-secret" || $VAR(../pre-shared-secret/@) != "" ; "No 'pre-shared-secret' specified for profile '$VAR(../../@)'"
+commit:expression: $VAR(@) != "x509" || $VAR(../x509/key/file/@) != "" ; "x509 key-file for profile '$VAR(../../@)' does not exist"

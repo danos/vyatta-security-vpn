@@ -1,0 +1,3 @@
+help: Generate local RSA key with specified number of bits
+run: gen_local_rsa_key.pl --F4 "$6"
+allowed: echo -n '<1024-4096>'

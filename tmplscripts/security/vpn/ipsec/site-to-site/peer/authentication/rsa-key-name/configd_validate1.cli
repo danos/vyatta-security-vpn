@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) in $VAR(/security/vpn/rsa-keys/rsa-key-name/@@) ; "RSA key '$VAR(@)' does not exist"

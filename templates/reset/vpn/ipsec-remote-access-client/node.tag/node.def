@@ -1,0 +1,6 @@
+help: Reset all tunnels for given remote-access client profile 
+
+allowed: vyatta-op-vpn-ipsec-vici --get-all-ipsec-ra-client-profiles 
+
+run:  vyatta-op-vpn-ipsec-vici \
+      --reset-ipsec-ra-client-profile="$4"

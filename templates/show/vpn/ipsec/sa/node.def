@@ -1,0 +1,4 @@
+help: Show all active IPsec Security Associations (SA)
+run:
+    vyatta-op-vpn.pl --show-ipsec-sa
+    vyatta-op-vpn-ipsec-vici --show-ipsec-sa=brief

@@ -1,0 +1,2 @@
+help: Generate x509 key-pair with private key as RSA (default)
+run: /opt/vyatta/sbin/vyatta-gen-x509-keypair.sh $5 rsa

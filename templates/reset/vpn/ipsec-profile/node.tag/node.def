@@ -1,0 +1,6 @@
+help: Reset all tunnels for given profile
+
+allowed: vyatta-dmvpn-op.pl --op=get-all-profiles
+
+run:  vyatta-dmvpn-op.pl \
+      --op=clear-tunnels-for-profile --profile="$4"

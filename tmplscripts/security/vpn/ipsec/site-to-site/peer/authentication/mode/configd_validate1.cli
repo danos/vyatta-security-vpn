@@ -1,0 +1,4 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) != "pre-shared-secret" || $VAR(../pre-shared-secret/@) != "" ; "No 'pre-shared-secret' specified for peer '$VAR(../../@)'"
+commit:expression: $VAR(@) != "x509" || $VAR(../x509/key/file/@) != "" ; "x509 key-file for peer '$VAR(../../@)' does not exist"
+commit:expression: $VAR(@) != "rsa" || $VAR(../rsa-key-name/@) != "" ; "No RSA key configured for peer '$VAR(../../@)'"

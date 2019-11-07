@@ -1,0 +1,56 @@
+#!/usr/bin/perl
+#
+# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2016, Brocade Communications Systems, Inc.
+# All Rights Reserved.
+#
+# This code was originally developed by Vyatta, Inc.
+# Portions created by Vyatta are Copyright (C) 2007-2013 Vyatta, Inc.
+# All Rights Reserved.
+#
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+use strict;
+use warnings;
+
+use File::Slurp;
+use Getopt::Long;
+
+use lib "/opt/vyatta/share/perl5";
+use Vyatta::VPN::Util qw(rsa_key_from_raw_key);
+
+my %opts;
+
+sub usage {
+    my ($retval) = @_;
+
+    my $usage =<<EOT;
+Usage: vyatta-pki [OPTIONS]... [FILE]
+Helper application to work with PKI formats
+
+When FILE is -, read standard input.
+
+  --raw_to_pem		Convert RSA private key in RAW format to PKCS#1
+EOT
+    print STDERR $usage;
+    exit $retval;
+}
+
+GetOptions(
+    'file=s' => \$opts{file},
+    'raw_to_pem' => \$opts{raw_to_pem},
+    '' => \$opts{stdio},
+) or usage(1);
+
+if ($opts{stdio}) {
+    $opts{file} = \*STDIN;
+}
+
+if ($opts{raw_to_pem}) {
+    my $rsa = rsa_key_from_raw_key($opts{file});
+    print $rsa->get_private_key_string();
+    exit 0;
+}
+
+usage(0);

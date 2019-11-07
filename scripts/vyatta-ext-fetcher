@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# Copyright (c) 2018-2019 AT&T Intellectual Property.
+# All rights reserved.
+#
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+CALLVRF=""
+
+# Mimic the original curl fetcher behavior
+ARGS="--silent --no-fail --location"
+
+[[ -n $CONNECT_TIMEOUT ]] && ARGS="$ARGS --connect-timeout $CONNECT_TIMEOUT"
+[[ $METHOD == "POST" ]] && ARGS="$ARGS --data-binary @-"
+[[ -n $INTERFACE ]] && ARGS="$ARGS --interface $INTERFACE"
+[[ -n $MAX_REDIR ]] && ARGS="$ARGS --max-redirs $MAX_REDIR"
+[[ -n $TIMEOUT ]] && ARGS="$ARGS --max-timeout $TIMEOUT"
+
+if [[ -n $INTERFACE ]]; then
+        VRF=`readlink /sys/class/net/$INTERFACE/master`
+        VRF=`basename $VRF`
+
+        # strip "vrf" prefix
+        VRF=${VRF:3}
+        [[ -n $VRF ]] && CALLVRF="chvrf $VRF"
+fi
+
+
+$CALLVRF curl $ARGS --header "$REQUEST_TYPE" --url "$URL"

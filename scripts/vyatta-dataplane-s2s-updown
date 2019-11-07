@@ -1,0 +1,105 @@
+#!/bin/sh
+#
+# Script called by strongSwan updown plugin when an IPsec CHILD_SA gets
+# established or deleted.
+#
+# **** License ****
+# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2016-2017, Brocade Communications Systems, Inc.
+# All Rights Reserved.
+# **** End License ****
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+# uncomment to log VPN connections
+VPN_LOGGING=1
+#
+# tag put in front of each log entry:
+TAG=vpn
+#
+# syslog facility and priority used:
+FAC_PRIO=local0.info
+
+# source shared updown helper code
+source /usr/lib/ipsec/vyatta-updown-helper.sh
+
+# only handle v6 events if dataplane supports them
+if [ "$PLUTO_VERB" == "up-client-v6" ] || \
+    [ "$PLUTO_VERB" == "down-client-v6" ] ; then
+    if [ ! -f /opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/enable-dataplane-ipsec6 ] ; then
+	exit 0
+    fi
+fi
+
+# fallback to default VRF, if no PLUTO_DOMAIN is configured
+[ -z $PLUTO_DOMAIN ] && PLUTO_DOMAIN="default"
+[ -z $PLUTO_CFG_INTERFACE ] && PLUTO_CFG_INTERFACE=""
+
+# the big choice
+case "$PLUTO_VERB:$1" in
+up-host:|up-host-v6:|up-client:|up-client-v6:)
+        # connection to my client subnet or me coming up
+        # If you are doing a custom version, firewall commands go here.
+        if ! updown $PLUTO_CONNECTION up ; then
+            exit 0
+        fi
+
+	AF="6"
+	[ "$PLUTO_VERB" == "up-client" ] || [ "$PLUTO_VERB" == "up-host" ] && AF="4"
+        /opt/vyatta/sbin/vyatta-s2s-config --updown --peer=$PLUTO_PEER \
+	    --mycl=$PLUTO_MY_CLIENT --peercl=$PLUTO_PEER_CLIENT \
+	    --action=up --af=$AF --proto=$PLUTO_MY_PROTOCOL \
+	    --lport=$PLUTO_MY_PORT --rport=$PLUTO_PEER_PORT \
+	    --overlay_vrf=$PLUTO_DOMAIN --interface=$PLUTO_CFG_INTERFACE \
+	    --connection=$PLUTO_CONNECTION --reqid=$PLUTO_REQID
+
+        # log IPsec client connection setup
+        if [ $VPN_LOGGING ]
+        then
+          if [ "$PLUTO_PEER_CLIENT" = "$PLUTO_PEER/32" ]
+          then
+            logger -t $TAG -p $FAC_PRIO \
+              "+ $PLUTO_PEER_ID $PLUTO_PEER -- $PLUTO_ME == $PLUTO_MY_CLIENT"
+          else
+            logger -t $TAG -p $FAC_PRIO \
+              "+ $PLUTO_PEER_ID $PLUTO_PEER_CLIENT == $PLUTO_PEER -- $PLUTO_ME == $PLUTO_MY_CLIENT"
+          fi
+        fi
+        ;;
+
+down-host:|down-host-v6:|down-client:|down-client-v6:)
+        # connection to my client subnet or me going down
+        # If you are doing a custom version, firewall commands go here.
+        if ! updown $PLUTO_CONNECTION down ; then
+            exit 0
+        fi
+
+	AF="6"
+	[ "$PLUTO_VERB" == "down-client" ] || [ "$PLUTO_VERB" == "down-host" ] && AF="4"
+        /opt/vyatta/sbin/vyatta-s2s-config --updown --peer=$PLUTO_PEER \
+	    --mycl=$PLUTO_MY_CLIENT --peercl=$PLUTO_PEER_CLIENT \
+	    --action=down --af=$AF --proto=$PLUTO_MY_PROTOCOL \
+	    --lport=$PLUTO_MY_PORT --rport=$PLUTO_PEER_PORT \
+	    --overlay_vrf=$PLUTO_DOMAIN --interface=$PLUTO_CFG_INTERFACE \
+	    --connection=$PLUTO_CONNECTION --reqid=$PLUTO_REQID
+
+
+
+        # log IPsec client connection teardown
+        if [ $VPN_LOGGING ]
+        then
+          if [ "$PLUTO_PEER_CLIENT" = "$PLUTO_PEER/32" ]
+          then
+            logger -t $TAG -p $FAC_PRIO -- \
+              "- $PLUTO_PEER_ID $PLUTO_PEER -- $PLUTO_ME == $PLUTO_MY_CLIENT"
+          else
+            logger -t $TAG -p $FAC_PRIO -- \
+              "- $PLUTO_PEER_ID $PLUTO_PEER_CLIENT == $PLUTO_PEER -- $PLUTO_ME == $PLUTO_MY_CLIENT"
+          fi
+        fi
+        ;;
+*)      echo "$0: unknown verb \`$PLUTO_VERB' or parameter \`$1'" >&2
+        exit 1
+        ;;
+esac
+exit 0

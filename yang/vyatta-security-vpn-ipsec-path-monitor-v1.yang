@@ -1,0 +1,118 @@
+module vyatta-security-vpn-ipsec-path-monitor-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-security-vpn-ipsec-path-monitor:1";
+	prefix vyatta-security-vpn-ipsec-path-monitor-v1;
+
+	import vyatta-security-v1 {
+		prefix security;
+	}
+	import vyatta-security-vpn-ipsec-v1 {
+		prefix ipsec;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-service-path-monitor-v1 {
+		prefix pathmon;
+	}
+
+	organization "AT&T Inc.";
+	contact
+		"AT&T Inc.
+		 Postal: 280 S. Akard Street
+				 Dallas, TX 25202
+		 Web: www.att.com";
+
+	description
+		"Copyright (c) 2018 AT&T Intellectual Property.
+		 All rights reserved.
+
+		 Redistribution and use in source and binary forms, with or
+		 without modification, are permitted provided that the following
+		 conditions are met:
+
+		 1. Redistributions of source code must retain the above copyright
+			notice, this list of conditions and the following disclaimer.
+		 2. Redistributions in binary form must reproduce the above
+			copyright notice, this list of conditions and the following
+			disclaimer in the documentation and/or other materials provided
+			with the distribution.
+		 3. Neither the name of the copyright holder nor the names of its
+			contributors may be used to endorse or promote products derived
+			from this software without specific prior written permission.
+
+		 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+		 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+		 LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+		 FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+		 COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+		 INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+		 BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+		 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+		 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+		 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+		 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+		 POSSIBILITY OF SUCH DAMAGE.
+
+		 SPDX-License-Identifier: BSD-3-Clause
+
+		 The YANG module for vyatta-security-vpn-ipsec-path-monitor-v1";
+
+	revision 2018-06-10 {
+		description "Initial revision.";
+	}
+
+	grouping ipsec-pathmon-association {
+		uses pathmon:pathmon-monitor-policy-association {
+			refine path-monitor {
+				description "Configure Path Monitor tracking for this source-interface
+
+					This configuration causes the IPsec tunnel to be dynamically established
+					or terminated via the source-interface based upon Path Monitor policy compliance
+					state.
+
+					If the compliance state is 'Compliant' or 'Marginally compliant' then
+					the source-interface is eligible to establish a IPsec tunnel. If the compliance state is
+					'Non-compliant' then the source-interface will not be used.
+
+					If multiple monitor/policy pairs are specified with policy operator OR (default) then at least
+					one must remain 'Compliant' or 'Marginally compliant' in order for the source-interface
+					to be used.
+
+					With multiple monitor/policy pairs and the policy operator AND they must all remain 'Compliant'
+					or 'Marginally compliant' in order for the source-interface to be used.";
+				configd:help "Path Monitor tracking";
+			}
+
+
+			augment path-monitor {
+				container policy {
+					description "Configure Path Monitior policy parameters.";
+					configd:help "Path Monitor policy parameters";
+
+					leaf operator {
+						description "Configure Path Monitor policy operator to control how multiple monitor/policy
+							pairs should be handled.";
+						configd:help "Path Monitor policy operator";
+						default "OR";
+						type enumeration {
+							enum "OR" {
+								description "At least one monitor/policy pair must be compliant.";
+								configd:help "Path Monitor policy operator OR";
+							}
+							enum "AND" {
+								description "All monitor/policy pairs need to be compliant.";
+								configd:help "Path Monitor policy operator AND";
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	augment /security:security/ipsec:vpn/ipsec:ipsec/ipsec:remote-access-client/ipsec:profile/ipsec:server/ipsec:source-interface {
+		uses ipsec-pathmon-association;
+	}
+}
+
+

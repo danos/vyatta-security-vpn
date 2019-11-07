@@ -1,0 +1,2 @@
+help: Show log for IPSEC
+run: journalctl -a --no-pager _COMM=charon

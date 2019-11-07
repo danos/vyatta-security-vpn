@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+syntax:expression: $VAR(@) == 2 || $VAR(@) == 5 || $VAR(@) == 14 || $VAR(@) == 15 || $VAR(@) == 16 || $VAR(@) == 17 || $VAR(@) == 18 || $VAR(@) == 19 || $VAR(@) == 20; "must be 2,5,14,15,16,17,18,19 or 20"

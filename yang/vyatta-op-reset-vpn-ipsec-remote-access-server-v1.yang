@@ -1,0 +1,86 @@
+module vyatta-op-reset-vpn-ipsec-remote-access-server-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-op-reset-vpn-ipsec-remote-access-server:1";
+	prefix vyatta-op-reset-vpn-ipsec-remote-access-server-v1;
+
+	import vyatta-opd-extensions-v1 {
+		prefix opd;
+	}
+	import vyatta-op-reset-v1 {
+		prefix reset;
+	}
+
+	organization "AT&T Inc.";
+	contact
+		"AT&T
+		 Postal: 208 S. Akard Street
+		         Dallas, TX 25202
+		 Web: www.att.com";
+
+	description
+		"Copyright (c) 2019, AT&T Intellectual Property.
+		 All rights reserved.
+
+		 Redistribution and use in source and binary forms, with or
+		 without modification, are permitted provided that the following
+		 conditions are met:
+
+		 1. Redistributions of source code must retain the above copyright
+			notice, this list of conditions and the following disclaimer.
+		 2. Redistributions in binary form must reproduce the above
+			copyright notice, this list of conditions and the following
+			disclaimer in the documentation and/or other materials provided
+			with the distribution.
+		 3. Neither the name of the copyright holder nor the names of its
+			contributors may be used to endorse or promote products derived
+			from this software without specific prior written permission.
+
+		 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+		 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+		 LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+		 FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+		 COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+		 INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+		 BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+		 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+		 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+		 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+		 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+		 POSSIBILITY OF SUCH DAMAGE.
+
+		 SPDX-License-Identifier: BSD-3-Clause
+
+		 Defines the operational CLI for the reset for IPsec RA VPN server connections.";
+
+	revision 2019-01-23 {
+		description "Initial version";
+	}
+
+	opd:augment /reset:reset {
+		opd:command vpn {
+			opd:help "Disconnect established VPN connections";
+
+			opd:command ipsec-remote-access-server {
+				opd:help "Disconnect clients from the IPsec RA VPN server profiles";
+
+				opd:argument profile-name {
+					opd:help "Disconnect clients from the IPsec RA VPN server profile";
+					opd:allowed 'vyatta-op-vpn-ipsec-vici --get-all-ipsec-ra-server-profiles';
+					type string {
+						length 1..255;
+					}
+
+					opd:argument peer {
+						description "Disconnect client from the IPsec RA VPN server profile.
+							     Accepts peers IP address as well as peers remote ID.";
+
+						opd:help "Disconnect client from the IPsec RA VPN server profile";
+						opd:allowed 'vyatta-op-vpn-ipsec-vici --get-ra-server-peers-for-cli --profile=$4';
+						opd:on-enter 'vyatta-op-vpn-ipsec-vici --reset-ipsec-ra-server-peer=$5 --profile=$4';
+						type string;
+
+					}
+				}
+			}
+		}
+	}
+}

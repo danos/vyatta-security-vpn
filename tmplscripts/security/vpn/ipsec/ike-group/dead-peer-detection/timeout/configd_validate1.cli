@@ -1,0 +1,2 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: exec "test $VAR(../../ike-version/@) != 1 && echo 'Warning: Keep-alive timeout only applied to IKEv1 connections.' || true";""

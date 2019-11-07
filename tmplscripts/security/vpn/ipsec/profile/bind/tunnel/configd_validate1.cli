@@ -1,0 +1,3 @@
+#!/opt/vyatta/bin/cliexpr
+commit:expression: $VAR(@) in $VAR(/interfaces/tunnel/@@) ; "Interface '$VAR(@)' does not exist"
+commit:expression: exec "test $(cli-shell-api returnValue interfaces tunnel $VAR(@) encapsulation) = gre-multipoint" ; "$VAR(@) must be mgre tunnel"

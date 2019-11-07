@@ -1,0 +1,2 @@
+help: secp384r1 (aka. P-384) curve (default)
+run: /opt/vyatta/sbin/vyatta-gen-x509-keypair.sh $5 ecdsa secp384r1

@@ -1,0 +1,2 @@
+help: Show all currently active IKE Security Associations (SA) that are using NAT Traversal
+run: vyatta-op-vpn.pl --show-ike-sa-natt

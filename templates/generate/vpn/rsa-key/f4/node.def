@@ -1,0 +1,2 @@
+help: Generate local RSA key with Fermat 4 (F4, or 65537) as public exponent
+run: gen_local_rsa_key.pl --F4

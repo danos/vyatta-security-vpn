@@ -1,0 +1,2 @@
+help: Show VPN debugging information
+run: vyatta-vpn-op.pl --op=show-vpn-debug

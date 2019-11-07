@@ -1,0 +1,4 @@
+help: Restart IPsec VPN
+run:
+    vyatta-vpn-op.pl --op=clear-vpn-ipsec-process
+    /opt/vyatta/sbin/lu -user configd sg vyattacfg -c "vpn-config-vici --force"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Vyatta IPsec Rekey
+PartOf=strongswan.service
+After=strongswan.service
+ConditionPathExists=/etc/vyatta/controller.conf
+
+[Service]
+ExecStart=/opt/vyatta/sbin/vyatta-ipsec-rekey
+Restart=on-failure
+
+[Install]
+WantedBy=strongswan.service
