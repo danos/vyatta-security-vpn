@@ -15,6 +15,8 @@ from collections import OrderedDict
 
 IPSEC_RA_VPN_SERVER_NAMEPREFIX = 'ipsec-remote-access-server'
 
+VFP_STATE_DIR = '/var/lib/vyatta-security-vpn/vfp/'
+
 DH2MODP = {
     2:'modp1024',
     5:'modp1536',
@@ -483,8 +485,9 @@ class IPsecRAVPNServer():
         self.ike_groups = ike_groups
         self.esp_groups = esp_groups
         self.keys = []
+        self.profiles = []
         self.pools = OrderedDict()
-        self.profiles = OrderedDict()
+        self.profiles_cfg = OrderedDict()
 
         if cfg is None:
             return
@@ -494,17 +497,57 @@ class IPsecRAVPNServer():
 
         for p in cfg.get('profile'):
             profile = IPsecRAVPNServerProfile(p, ike_groups, esp_groups)
-            self.profiles.update(profile.section())
+            self.profiles.append(profile)
+
+            self.profiles_cfg.update(profile.section())
+
             key = profile.key()
             if key:
                 self.keys.extend(key)
 
+    def _flush_vfp_state(self):
+        for entry in os.scandir(VFP_STATE_DIR):
+            if not entry.is_file():
+                continue
+            if not entry.name.startswith(IPSEC_RA_VPN_SERVER_NAMEPREFIX):
+                continue
+            if entry.name.endswith('.prev'):
+                continue
+
+            try:
+                os.rename(VFP_STATE_DIR + entry.name, VFP_STATE_DIR + entry.name + '.prev')
+            except FileNotFoundError:
+                pass
+
+    def _sync_vfp_state(self):
+
+        self._flush_vfp_state()
+
+        for p in self.profiles:
+            for t in p.tunnels:
+                prefix = p.conn_name()
+                conn = t.connection_name(prefix)
+                vfp_intf = t.get('uses')
+                if vfp_intf is None:
+                    continue
+
+                fn = VFP_STATE_DIR + conn
+                with open(fn, 'w') as f:
+                    f.write(vfp_intf)
+
+                try:
+                    os.remove(fn + '.prev')
+                except FileNotFoundError:
+                    pass
+
     def sync(self):
         vs = self.vs
 
+        self._sync_vfp_state()
+
         # Delete stale connections / pools
         existing_conns = vs.get_conns().get('conns')
-        stale_conns = list(filter(lambda x: x.startswith(IPSEC_RA_VPN_SERVER_NAMEPREFIX.encode()) and x not in self.profiles.keys(), existing_conns))
+        stale_conns = list(filter(lambda x: x.startswith(IPSEC_RA_VPN_SERVER_NAMEPREFIX.encode()) and x not in self.profiles_cfg.keys(), existing_conns))
         for c in stale_conns:
 
             # Don't wait for IKE SA delete responses
@@ -541,6 +584,6 @@ class IPsecRAVPNServer():
 
         vs.load_pool(self.pools)
 
-        vs.load_conn(self.profiles)
+        vs.load_conn(self.profiles_cfg)
 
 

@@ -16,12 +16,11 @@ use File::Slurp qw( write_file read_dir);
 my $ipsec_s2s_cli = 'security vpn ipsec site-to-site peer';
 my $ipsec_s2s_prefix = 'peer';
 my $ipsec_ra_vpn_client_cli = 'security vpn ipsec remote-access-client profile';
-my $ipsec_ra_vpn_server_cli = 'security vpn ipsec remote-access-server profile';
 my $ipsec_ra_vpn_client_prefix = 'ipsec_ra_client';
-my $ipsec_ra_vpn_server_prefix = 'ipsec-remote-access-server';
 my $config = Vyatta::Config->new();
 my $psuf = '.prev';
 
+my $vfp_ipsec_ravpn_server_prefix = VFP_STATE_DIR . "/ipsec-remote-access-server";
 
 sub write_vfp_state {
     my ($connection, $ifname) = @_;
@@ -68,7 +67,7 @@ sub read_vfp_conf {
                         write_vfp_state($connection, $ifname);
                     }
                 }
-            } else { # ra_vpn_server and s2s
+            } else { # s2s
                 my $connection = $prefix .'-'. $peer . '-tunnel-' . $tunnel;
                 write_vfp_state($connection, $ifname);
             }
@@ -83,8 +82,10 @@ sub read_vfp_conf {
 sub flush_vfp_state {
     my @files = read_dir(VFP_STATE_DIR, prefix => 1);
     foreach my $fn (@files) {
-	if (! ( $fn =~ /prev$/ )) {
-           rename $fn, $fn . ".prev" if (-f $fn);
+	next if ( $fn =~ /^$vfp_ipsec_ravpn_server_prefix/ );
+
+	if (! ( $fn =~ /$psuf$/ )) {
+           rename $fn, $fn . $psuf if (-f $fn);
 	}
     }
 }
@@ -92,6 +93,5 @@ sub flush_vfp_state {
 flush_vfp_state();
 read_vfp_conf($ipsec_s2s_cli, $ipsec_s2s_prefix);
 read_vfp_conf($ipsec_ra_vpn_client_cli, $ipsec_ra_vpn_client_prefix);
-read_vfp_conf($ipsec_ra_vpn_server_cli, $ipsec_ra_vpn_server_prefix);
 
 exit 0;
