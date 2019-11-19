@@ -267,6 +267,13 @@ if ( $vcVPN->exists('ipsec') ) {
 	        }
         }
       }
+      my $compression = $vcVPN->returnValue(
+        "ipsec esp-group $esp_group compression");
+      if ( $compression eq "enable" ) {
+        print STDERR
+          "VPN Warning: Compression is configured for ESP group $esp_group, "
+          . "but remains disabled as it is no longer supported.\n";
+      }
     }
 
     # Disable policy checks on v4 traffic to allow locally-destined

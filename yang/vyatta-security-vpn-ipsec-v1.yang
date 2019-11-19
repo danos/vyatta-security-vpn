@@ -57,6 +57,9 @@ module vyatta-security-vpn-ipsec-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
+	revision 2019-11-19 {
+		description "Deprecate optional compression as no longer implemented";
+	}
 	revision 2019-06-27 {
 		description "IPsec RA client: support domains as server address.";
 	}
@@ -885,6 +888,7 @@ Example usage : 'aA1-&!@,.:_2Bb'
 						}
 						configd:help "ESP compression";
 						default "disable";
+						status deprecated;
 					}
 					leaf mode {
 						type enumeration {
