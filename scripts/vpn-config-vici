@@ -12,19 +12,16 @@ import getopt
 import vici
 import pprint
 import json
-import dbus
 
 from collections import OrderedDict
 from vyatta import configd
-from vyatta.vpn.ipsec.config import IPsecRAVPNServer, ClientProfile, IKEGroup, ESPGroup, get_cert_or_key, setup_vici
+from vyatta.vpn.ipsec.config import IPsecRAVPNServer, ClientProfile, IKEGroup, ESPGroup, get_cert_or_key, setup_vici, setup_dbus
 
 DEBUG = False
 FORCE = False
 PP = None
 CONFIG_CANDIDATE=configd.Client.CANDIDATE
 CONFIG_RUNNING=configd.Client.RUNNING
-
-IKE_SA_DAEMON = None
 
 def dbg(msg):
     global PP
@@ -41,23 +38,6 @@ CLIENT_NAMEPREFIX = "ipsec_ra_client"
 
 IPSEC_CFG_PATH = 'security vpn ipsec'
 INTF_TUNNEL_CFG_PATH = 'interfaces tunnel'
-
-DBUS_INTERFACE = 'net.vyatta.eng.security.vpn.ipsec'
-DBUS_OBJECT    = '/net/vyatta/eng/security/vpn/ipsec'
-
-def setup_dbus():
-    global IKE_SA_DAEMON
-    if IKE_SA_DAEMON:
-        return IKE_SA_DAEMON
-
-    bus = dbus.SystemBus()
-    try:
-        IKE_SA_DAEMON = bus.get_object(DBUS_INTERFACE, DBUS_OBJECT)
-    except dbus.DBusException as e:
-        err("Failed to connect to IKE SA daemon: {}".format(e))
-        sys.exit(1)
-
-    return IKE_SA_DAEMON 
 
 def conn_name_of_profile(profile, tunnel_id=None):
     if tunnel_id:
@@ -148,7 +128,7 @@ def ra_config_changed(client, ipsec_cfg, ra_profiles):
 
     # Existing profiles - deleted?
     try:
-        ipsec_cfg_existing = client.tree_get_full_dict(IPSEC_CFG_PATH, CONFIG_RUNNING, "json")
+        ipsec_cfg_existing = client.tree_get_dict(IPSEC_CFG_PATH, CONFIG_RUNNING, "json")
         rac = ipsec_cfg_existing['ipsec']['remote-access-client']
         for p in rac['profile']:
             path = 'security vpn ipsec remote-access-client profile ' + p['profile-name']
@@ -249,7 +229,7 @@ def load_vpn_x509(vs, configd_client):
     # security vpn x509 - hierachy
     dbg("loading certs and crls")
     try:
-        top_cfg = configd_client.tree_get_full_dict("security vpn x509", CONFIG_CANDIDATE, "json")
+        top_cfg = configd_client.tree_get_dict("security vpn x509", CONFIG_CANDIDATE, "json")
         cfg = top_cfg['x509']
         authorities = cfg.get('ca-certs')
         crls = cfg.get('crls')
@@ -283,7 +263,7 @@ def load_ipsec_ra_vpn_server(vs, configd_client, ipsec_cfg):
 # load all connections.
 def load_ipsec_ra_vpn_client(vs, configd_client, ipsec_cfg):
     try:
-        ri_cfg = configd_client.tree_get_full_dict("routing routing-instance", CONFIG_CANDIDATE, "json")
+        ri_cfg = configd_client.tree_get_dict("routing routing-instance", CONFIG_CANDIDATE, "json")
     except configd.Exception as f:
         ri_cfg = None
 
@@ -335,7 +315,11 @@ def load_ipsec_ra_vpn_client(vs, configd_client, ipsec_cfg):
 
 def trigger_ipsec_ra_vpn_client(updates):
 
-    ike_sa_daemon = setup_dbus()
+    try:
+        ike_sa_daemon = setup_dbus()
+    except ConnectionRefusedError as e:
+        err("Failed to connect to IKE SA daemon\n")
+        sys.exit(1)
 
     if updates is None:
        return
@@ -432,13 +416,13 @@ def vpn_main():
         err("can't connect to configd: {}".format(f))
         sys.exit(1)
     try:
-        ipsec_cfg = configd_client.tree_get_full_dict(IPSEC_CFG_PATH, CONFIG_CANDIDATE, "json")
+        ipsec_cfg = configd_client.tree_get_dict(IPSEC_CFG_PATH, CONFIG_CANDIDATE, "json")
     except configd.Exception as f:
         # continue there might be a L2TP/IPsec RA server which requires the X.509 configuration
         ipsec_cfg = None
 
     try:
-        intf_tunnel_cfg = configd_client.tree_get_full_dict(INTF_TUNNEL_CFG_PATH, CONFIG_CANDIDATE, "json")
+        intf_tunnel_cfg = configd_client.tree_get_dict(INTF_TUNNEL_CFG_PATH, CONFIG_CANDIDATE, "json")
     except configd.Exception as f:
         intf_tunnel_cfg = None
 
@@ -460,7 +444,11 @@ def vpn_main():
     # always reload, to get a fresh copy, even on non IPsec RA VPN client changes
     # to pick up connection-manager logging changes
     if is_charon_running():
-        ike_sa_daemon = setup_dbus()
+        try:
+            ike_sa_daemon = setup_dbus()
+        except ConnectionRefusedError as e:
+            err("Failed to connect to IKE SA daemon\n")
+            sys.exit(1)
 
         # 3. signal reload to vyatta-ike-sa-daemon
         dbg('trigger reload for vyatta-ike-sa-daemon')

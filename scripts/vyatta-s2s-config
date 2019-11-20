@@ -215,7 +215,6 @@ if ( $updown ne '' ) {
                 sel_dport       => $rport,
                 sel_sport       => $lport,
                 sel_proto       => $proto,
-                sel_ifindex     => $vfp_ifname,
             }
         );
         s2s_handle_vfp( $action, $cstore_config, $sel_if, $cstore_config_pb );
@@ -458,6 +457,7 @@ sub send_bind_cmd {
       )
     {
         $config = "$config $sel_if";
+        $config_pb->{sel_ifindex} = $sel_if;
     }
 
     print("  CSTORE: KEY s2s $config\n")

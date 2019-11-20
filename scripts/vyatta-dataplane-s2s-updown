@@ -35,6 +35,12 @@ fi
 [ -z $PLUTO_DOMAIN ] && PLUTO_DOMAIN="default"
 [ -z $PLUTO_CFG_INTERFACE ] && PLUTO_CFG_INTERFACE=""
 
+# IPsec RA VPN server PLUTO_CONNECTION is not unique
+if [[ $PLUTO_CONNECTION == ipsec-remote-access-server* ]]; then
+        PEER_CLIENT=${PLUTO_PEER_CLIENT//\//_}
+        PLUTO_CONNECTION="$PLUTO_CONNECTION+$PEER_CLIENT"
+fi
+
 # the big choice
 case "$PLUTO_VERB:$1" in
 up-host:|up-host-v6:|up-client:|up-client-v6:)

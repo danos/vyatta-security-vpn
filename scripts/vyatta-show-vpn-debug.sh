@@ -56,6 +56,8 @@ ip rule list
 echo
 /opt/vyatta/bin/vtyshow.pl show ip route
 echo
+ip route list table all
+echo
 
 #ls -l ipsec
 if [ -f /proc/net/ipsec_version ];
@@ -101,9 +103,24 @@ else
         fi
 fi
 
-#dump database deatils
+#dump dataplane deatils
 if [ ! -f '/opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/disable-dataplane-ipsec' ]; then
 	/opt/vyatta/bin/vplsh -l -c 'ipsec'
+	echo
+	# query all VRFs
+	for n in `ls -1d /sys/class/net/vrf*/`; do
+		vrf=$( basename $n )
+
+		echo "# vplsh ipsec commands for VRF $vrf"
+		/opt/vyatta/bin/vplsh -l -c "ipsec spd vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+		/opt/vyatta/bin/vplsh -l -c "ipsec sad vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+		/opt/vyatta/bin/vplsh -l -c "ipsec spi vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+		/opt/vyatta/bin/vplsh -l -c "ipsec bind vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+		echo
+	done
+	# punt path is required when dataplane is used for IPsec
+	iptables-save
+	echo
 fi
 
 # dump current logging options

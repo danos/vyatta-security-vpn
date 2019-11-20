@@ -2,6 +2,10 @@
 # Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2014-2016 by Brocade Communications Systems, Inc.
 # All rights reserved.
+#
+# Copyright (c) 2008-2009, 2011-2012 Vyatta, Inc.
+# All rights reserved.
+
 
 # SPDX-License-Identifier: GPL-2.0-only
 

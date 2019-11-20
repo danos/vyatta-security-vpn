@@ -1,0 +1,48 @@
+#!/bin/vcli -f
+#
+# Copyright (c) 2019, AT&T Intellectual Property. All rights reserved.
+# Copyright (c) 2014-2016 by Brocade Communications Systems, Inc.
+# All rights reserved.
+
+source "$(cd "$(dirname "${0}")" && pwd -P)"/../tech-support.functions
+
+header IPSec
+if cli-shell-api existsActive security vpn ipsec; then
+	header IPSec Status
+	time_out "run show vpn ipsec status"
+	header IPSec sa
+	time_out "run show vpn ipsec sa"
+	header IPSec sa Detail
+	time_out "run show vpn ipsec sa detail"
+	header IPSec sa Statistics
+	time_out "run show vpn ipsec sa statistics"
+	header VPN ike sa
+	time_out "run show vpn ike sa"
+
+	if ! check_md5sum libstrongswan /etc/strongswan.conf; then
+		header /etc/strongswan.conf
+		do_cmd cat /etc/strongswan.conf
+	else
+		echo "Unmodified or not installed: /etc/strongswan.conf"
+	fi
+
+	header /etc/ipsec.conf
+	do_cmd cat /etc/ipsec.conf
+
+	if [ -r /etc/dmvpn.conf ]; then
+		header /etc/dmvpn.conf
+		do_cmd cat /etc/dmvpn.conf
+	fi
+
+	header IPSec Daemon State
+	do_cmd ipsec statusall
+
+	header VPN Dataplane Ipsec Dump
+	do_cmd vplsh -l -c 'ipsec'
+
+	header VPN iptables Dump
+	do_cmd iptables-save
+
+else
+	echo "IPSec is not configured"
+fi

@@ -8,7 +8,7 @@
 # All Rights Reserved.
 #
 # This code was originally developed by Vyatta, Inc.
-# Portions created by Vyatta are Copyright (C) 2006, 2007, 2008, 2009 Vyatta, Inc.
+# Portions created by Vyatta are Copyright (C) 2006-2012 Vyatta, Inc.
 # All Rights Reserved.
 #
 # Description: Start Openswan VPN based on verified configuration
@@ -137,6 +137,7 @@ if ( $vcVPN->exists('l2tp remote-access') ) {
   }
   if (defined ($l2tp_intf)) {
     chomp($l2tp_intf);
+    $l2tp_intf =~ s/\./\//g;
     vpn_exec("sysctl net.ipv4.conf.$l2tp_intf.disable_policy=1 >&/dev/null",
              'VPN toggle net.ipv4.conf.intf.disable_policy');
   }
@@ -148,10 +149,11 @@ if ( $vcVPN->exists('l2tp remote-access') ) {
   } else {
     $l2tp_intf = $vcVPN->returnOrigValue('l2tp remote-access dhcp-interface');
   }
-  if (defined ($l2tp_intf)) {
+  unless ($l2tp_intf eq '') {
     chomp($l2tp_intf);
+    $l2tp_intf =~ s/\./\//g;
     vpn_exec("sysctl net.ipv4.conf.$l2tp_intf.disable_policy=0 >&/dev/null",
-             'VPN toggle net.ipv4.conf.intf.disable_policy');
+             'VPN toggle net.ipv4.conf.<intf>.disable_policy');
   }
 }
 

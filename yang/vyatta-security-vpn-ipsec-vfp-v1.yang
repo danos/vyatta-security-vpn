@@ -8,6 +8,9 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 	import vyatta-security-vpn-ipsec-v1 {
 		prefix ipsec;
 	}
+	import vyatta-security-vpn-ipsec-remote-access-server-v1 {
+		prefix server;
+	}
 	import vyatta-interfaces-v1 {
 		prefix if;
 	}
@@ -26,7 +29,7 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 		 Web: www.att.com";
 
 	description
-		"Copyright (c) 2017-2018, AT&T Intellectual Property.
+		"Copyright (c) 2017-2019, AT&T Intellectual Property.
 		 All rights reserved.
 
 		 Redistribution and use in source and binary forms, with or
@@ -60,12 +63,20 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-vfp-v1";
 
+	revision 2019-07-16 {
+		description "Added ipsec-ra-server-vfp feature to augment uses vfp to remote-access-server tunnel.";
+	}
+
 	revision 2018-01-11 {
 		description "Augment uses vfp to remote-access-client tunnel.";
 	}
 
 	revision 2017-11-14 {
 		description "Initial revision.";
+	}
+
+	feature ipsec-ra-server-vfp {
+		description "Remote access server vfp configuration";
 	}
 
 	grouping uses-vfp {
@@ -84,6 +95,11 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 	}
 
 	augment /security:security/ipsec:vpn/ipsec:ipsec/ipsec:remote-access-client/ipsec:profile/ipsec:tunnel {
+		uses uses-vfp;
+	}
+
+	augment /security:security/ipsec:vpn/ipsec:ipsec/server:remote-access-server/server:profile/server:tunnel {
+		if-feature ipsec-ra-server-vfp;
 		uses uses-vfp;
 	}
 }

@@ -9,6 +9,7 @@ import socket
 import sys
 import time
 import vici
+import dbus
 
 from collections import OrderedDict
 
@@ -29,8 +30,34 @@ DH2MODP = {
 IKE_REKEY_MARGIN = 0.1 # relative
 ESP_REKEY_MARGIN = 0.1 # relative
 
+DBUS_INTERFACE = 'net.vyatta.eng.security.vpn.ipsec'
+DBUS_OBJECT    = '/net/vyatta/eng/security/vpn/ipsec'
+DBUS_CONN_RETRIES = 3
+
 def err(msg):
     print(msg, file=sys.stderr)
+
+IKE_SA_DAEMON = None
+
+def setup_dbus():
+    global IKE_SA_DAEMON
+    if IKE_SA_DAEMON:
+        return IKE_SA_DAEMON
+
+    bus = dbus.SystemBus()
+
+    retries = DBUS_CONN_RETRIES
+    while IKE_SA_DAEMON == None and retries > 0:
+        try:
+            IKE_SA_DAEMON = bus.get_object(DBUS_INTERFACE, DBUS_OBJECT)
+        except dbus.DBusException as e:
+            time.sleep(0.5)
+            retries -= 1
+
+    if IKE_SA_DAEMON:
+        return IKE_SA_DAEMON
+    else:
+        raise ConnectionRefusedError
 
 def setup_vici():
     s = socket.socket(socket.AF_UNIX)
@@ -213,8 +240,13 @@ class Tunnel:
             self.data['updown'] = '/usr/lib/ipsec/vyatta-dataplane-s2s-updown'.encode()
             mode = self.esp_group.get('mode')
             self.data['mode'] = mode.encode()
-            if self.get('uses'):
+            if self.get('vyatta-security-vpn-ipsec-vfp-v1:uses'):
+                vfp_intf = self.get('vyatta-security-vpn-ipsec-vfp-v1:uses')
+            elif self.get('uses'):
                 vfp_intf = self.get('uses')
+            else:
+                vfp_intf = None
+            if vfp_intf:
                 self.data['interface'] = vfp_intf.encode()
                 if self.vrf_interfaces:
                     routing_instance = self.vrf_interfaces.get(vfp_intf)

@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2017-2019, AT&T Intellectual Property. All rights reserved.
+# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# All rights reserved.
 #
 
 # SPDX-License-Identifier: GPL-2.0-only
@@ -15,7 +16,9 @@ use File::Slurp qw( write_file read_dir);
 my $ipsec_s2s_cli = 'security vpn ipsec site-to-site peer';
 my $ipsec_s2s_prefix = 'peer';
 my $ipsec_ra_vpn_client_cli = 'security vpn ipsec remote-access-client profile';
+my $ipsec_ra_vpn_server_cli = 'security vpn ipsec remote-access-server profile';
 my $ipsec_ra_vpn_client_prefix = 'ipsec_ra_client';
+my $ipsec_ra_vpn_server_prefix = 'ipsec-remote-access-server';
 my $config = Vyatta::Config->new();
 my $psuf = '.prev';
 
@@ -65,7 +68,7 @@ sub read_vfp_conf {
                         write_vfp_state($connection, $ifname);
                     }
                 }
-            } else {
+            } else { # ra_vpn_server and s2s
                 my $connection = $prefix .'-'. $peer . '-tunnel-' . $tunnel;
                 write_vfp_state($connection, $ifname);
             }
@@ -89,5 +92,6 @@ sub flush_vfp_state {
 flush_vfp_state();
 read_vfp_conf($ipsec_s2s_cli, $ipsec_s2s_prefix);
 read_vfp_conf($ipsec_ra_vpn_client_cli, $ipsec_ra_vpn_client_prefix);
+read_vfp_conf($ipsec_ra_vpn_server_cli, $ipsec_ra_vpn_server_prefix);
 
 exit 0;

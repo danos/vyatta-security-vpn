@@ -3,9 +3,9 @@
 #
 # Copyright:
 #
-#	Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
-#	Copyright (c) 2007-2016 by Brocade Communications Systems, Inc.
-#	All Rights Reserved.
+#   Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+#   Copyright (c) 2007-2016 by Brocade Communications Systems, Inc.
+#   All Rights Reserved.
 #
 # License:
 #

@@ -1,5 +1,6 @@
-vyatta-security-vpn (1.36+danos1) unstable; urgency=medium
+vyatta-security-vpn (1.40) unstable; urgency=medium
 
   * DANOS Import
  
- -- Vyatta Package Maintainers <DL-vyatta-help@att.com>  Wed, 06 Nov 2019 13:40:56 +0000
+ -- Vyatta Package Maintainers <DL-vyatta-help@att.com>  Fri, 08 Nov 2019 15:43:08 +0000
+

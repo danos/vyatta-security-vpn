@@ -551,7 +551,7 @@ sub  trim {
 
 sub get_config_by_conn {
     my ($conn) = @_;
-    $conn =~ s/({\d+}|\[\d+\])//xms;
+    $conn =~ s/(\{\d+}|\[\d+\])//xms;
     my $conn_re = qr/conn\s+$conn/xms;
 
     my $file = '/etc/ipsec.conf';

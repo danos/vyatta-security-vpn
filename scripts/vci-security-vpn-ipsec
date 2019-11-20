@@ -52,7 +52,7 @@ class CharonConfigSync():
         if self.cfg:
             ike_group = self.cfg.get('ike-group')
             esp_group = self.cfg.get('esp-group')
-            cfg_ipsec_ra_vpn_server_v1 = self.cfg.get('vyatta-security-vpn-ipsec-remote-access-server-v1:remote-access-server')
+            cfg_ipsec_ra_vpn_server_v1 = self.cfg.get(NS_IPSEC_RA_SERVER_PREFIX + 'remote-access-server')
 
         if ike_group and esp_group:
             ike_groups = {v['tagnode'] : IKEGroup(v) for v in ike_group}

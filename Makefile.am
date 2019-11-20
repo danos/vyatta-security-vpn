@@ -12,6 +12,7 @@ strongswandir    = /etc/strongswan.d
 tmplscriptdir = $(datadir)/tmplscripts
 yangdir = /usr/share/configd/yang
 dhcphookdir = /etc/dhcp/dhclient-exit-hooks.d
+techsprtdir = $(datadir)/vyatta-op/functions/tech-support.d
 
 sbin_SCRIPTS =
 bin_SCRIPTS =
@@ -71,6 +72,8 @@ install-exec-hook:
 	cp scripts/key-pair.template $(DESTDIR)$(sysconfdir)
 	mkdir -p $(DESTDIR)$(opdir)
 	cd templates && $(cpiop) $(DESTDIR)$(opdir)
+	mkdir -p $(DESTDIR)$(techsprtdir)
+	cp scripts/1900-vyatta-vpn-ipsec $(DESTDIR)$(techsprtdir)
 
 coverage:
 	cover -t -make 'prove -r tests;'

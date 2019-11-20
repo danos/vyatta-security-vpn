@@ -19,6 +19,7 @@ from enum import Enum
 from vplaned import Controller
 from vyatta import configd
 
+from vyatta.vpn.ipsec.config import setup_dbus
 
 from collections import OrderedDict
 
@@ -32,7 +33,6 @@ IPSEC_RA_CLIENT_PREFIX = 'ipsec_ra_client-'
 IPSEC_RA_SERVER_PREFIX = 'ipsec-remote-access-server-'
 
 DBUS_INTERFACE = 'net.vyatta.eng.security.vpn.ipsec'
-DBUS_OBJECT    = '/net/vyatta/eng/security/vpn/ipsec'
 
 class Mode(Enum):
     BRIEF = 1
@@ -260,7 +260,7 @@ def configd_query(cfgpath):
     client = configd_client()
 
     try:
-        return client.tree_get_full_dict(cfgpath, configd.Client.RUNNING, "json")
+        return client.tree_get_dict(cfgpath, configd.Client.RUNNING, "json")
     except:
         return None
 
@@ -676,22 +676,16 @@ def get_ipsec_ra_client_profiles(vrf=None, prefix=IPSEC_RA_CLIENT_PREFIX):
 def get_ipsec_ra_server_profiles(vrf=None):
     get_ipsec_ra_client_profiles(vrf, prefix=IPSEC_RA_SERVER_PREFIX)
 
-def setup_dbus():
-
-    bus = dbus.SystemBus()
-    try:
-        obj = bus.get_object(DBUS_INTERFACE, DBUS_OBJECT)
-    except dbus.DBusException as e:
-        print("Failed to connect to IKE SA daemon: {}".format(e))
-        sys.exit(1)
-
-    return obj
-
-
 def reset_ipsec_ra_client_profile(profile, vrf=None):
 
     conn_id = 'ipsec_ra_client-{}'.format(profile)
-    service = setup_dbus()
+
+    try:
+        service = setup_dbus()
+    except ConnectionRefusedError as e:
+        err("Failed to connect to IKE SA daemon\n")
+        sys.exit(1)
+
     try:
         service.reset([conn_id], dbus_interface=DBUS_INTERFACE)
     except dbus.DBusException as e:

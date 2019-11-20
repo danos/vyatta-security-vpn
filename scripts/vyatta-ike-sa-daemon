@@ -1232,7 +1232,10 @@ class PathMonStateChangeJob(Job):
 
     def delete_job(self):
         pm_tuple = (self.monitor, self.policy)
-        del self.daemon.job_index_pm_state_change[pm_tuple]
+        try:
+            del self.daemon.job_index_pm_state_change[pm_tuple]
+        except KeyError as e:
+            dbg(LOG.JOB, 'Could not find job in pm_state_change index: {}'.format(e))
 
     def add_job(self, job_args):
         pm_tuple = (self.monitor, self.policy)
@@ -1356,6 +1359,7 @@ class Daemon:
 
         # Listener (single threaded)
         self._ike_updown_refcount = {}
+        self._child_updown_refcount = {}
 
     def run(self):
         notice(LOG.CONN, '{} started.'.format(DAEMON_NAME))
@@ -2086,17 +2090,26 @@ class Daemon:
                 ike_cfg.update_state(SAState.ESTABLISHED)
 
             elif event == b'child-updown':
-                child_cfg = self.find_child_cfg(conn_id)
+                child_sas = values.get('child-sas')
+                for child_conn_id, _ in child_sas.items():
 
-                if child_cfg is None:
-                    continue
+                    child_cfg = self.find_child_cfg(child_conn_id)
 
-                ike_cfg = child_cfg.ike_cfg
+                    if child_cfg is None:
+                        continue
 
-                dbg(LOG.EVENT, '[UP] received updown signal up for CHILD SA: {}'
-                    .format(child_cfg.conn_id))
+                    ike_cfg = child_cfg.ike_cfg
 
-                child_cfg.update_state(SAState.ESTABLISHED)
+                    dbg(LOG.EVENT, '[UP] received updown signal up for CHILD SA: {}'
+                        .format(child_cfg.conn_id))
+                    try:
+                        self._child_updown_refcount[child_cfg.conn_id] += 1
+                    except KeyError:
+                        self._child_updown_refcount[child_cfg.conn_id] = 1
+                    dbg(LOG.EVENT, '{} -> Child SA updown refcount: {}'
+                        .format(child_cfg.conn_id, self._child_updown_refcount[child_cfg.conn_id]))
+
+                    child_cfg.update_state(SAState.ESTABLISHED)
 
     def _listen_updown_down(self, event, event_values):
 
@@ -2136,18 +2149,27 @@ class Daemon:
                     if child_cfg is None:
                         continue
 
-                    child_cfg.update_state(SAState.INACTIVE)
+                    try:
+                        self._child_updown_refcount[child_cfg.conn_id] -= 1
+                        if self._child_updown_refcount[child_cfg.conn_id] < 0:
+                            dbg(LOG.EVENT, '[DOWN] Child SA updown reference accounting got out of'
+                                ' sync!')
+                            raise ValueError
+                    except (KeyError, ValueError):
+                        self._child_updown_refcount[child_cfg.conn_id] = 0
 
-                    ike_cfg = child_cfg.ike_cfg
-                    if ike_cfg.get_state() == SAState.DESTROYING:
-                        dbg(LOG.EVENT, '[DOWN] IKE SA in DESTROYING state. Ignoring.')
-                        continue
+                    dbg(LOG.EVENT, '{} -> Child SA updown refcount: {}'
+                        .format(child_cfg.conn_id, self._child_updown_refcount[child_cfg.conn_id]))
+                    if child_cfg.state == SAState.ESTABLISHED and \
+                        self._child_updown_refcount[child_cfg.conn_id] == 0:
+                        child_cfg.update_state(SAState.INACTIVE)
 
-                    job = InitiateJob(self, child_cfg)
-                    delay = child_cfg.get_delay(Delay.RECONNECT)
-                    notice(LOG.EVENT, '[DOWN] scheduling delayed initiate job for CHILD SA {} '
-                           'in {} seconds.'.format(child_cfg.conn_id, delay))
-                    self.schedule(job, delay=delay)
+                    if child_cfg.state == SAState.INACTIVE:
+                        job = InitiateJob(self, child_cfg)
+                        delay = child_cfg.get_delay(Delay.RECONNECT)
+                        notice(LOG.EVENT, '[DOWN] scheduling delayed initiate job for CHILD SA {} '
+                               'in {} seconds.'.format(child_cfg.conn_id, delay))
+                        self.schedule(job, delay=delay)
 
     def _listen_func(self):
 
@@ -2283,6 +2305,7 @@ class Daemon:
         stats.update([('path_monitor_mode', self.path_monitor_mode)])
 
         stats.update([('ike_updown_refcount', self._ike_updown_refcount)])
+        stats.update([('child_updown_refcount', self._child_updown_refcount)])
 
         return ppformat(stats)
 

@@ -203,13 +203,13 @@ def process_config():
         sys.exit(0)
 
     try:
-        top = client.tree_get_full_dict(IKE_CFGPATH, CONFIG_CANDIDATE, "json")
+        top = client.tree_get_dict(IKE_CFGPATH, CONFIG_CANDIDATE, "json")
         ike_cfg = top.get('ike')
     except configd.Exception:
         ike_cfg = None
 
     try:
-        top = client.tree_get_full_dict(X509_CFGPATH, CONFIG_CANDIDATE, "json")
+        top = client.tree_get_dict(X509_CFGPATH, CONFIG_CANDIDATE, "json")
         x509_cfg = top.get('x509')
     except configd.Exception:
         x509_cfg = None
