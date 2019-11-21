@@ -1,3 +1,12 @@
+vyatta-security-vpn (1.41) unstable; urgency=medium
+
+  [ Mike Manning ]
+  * IPsec: ESP compression not supported by dataplane, but exposed as CLI option
+
+  [ Daniel Gollub ]
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 21 Nov 2019 16:05:44 +0100
+
 vyatta-security-vpn (1.40) unstable; urgency=medium
 
   * DANOS Import
