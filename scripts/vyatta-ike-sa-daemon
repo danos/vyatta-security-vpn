@@ -1728,12 +1728,12 @@ class Daemon:
                             ike_cfg.priority = IKE_PRIO_LOWEST
 
                         self.pathmon_update_ike_cfg(ike_cfg)
-                        self.ike_cfgs.update([(ike_conn_id, ike_cfg)])
+                        self.ike_cfgs.update([(ike_cfg.conn_id, ike_cfg)])
 
                         profile.add_ike_cfg(ike_cfg)
                         for tunnel in p['tunnel']:
                             tunnel_id = tunnel['tunnel-id']
-                            child_conn_id = '{}-tunnel-{}'.format(ike_conn_id, tunnel_id)
+                            child_conn_id = '{}-tunnel-{}'.format(ike_cfg.conn_id, tunnel_id)
                             logical_id = '{}-tunnel-{}'.format(profile_conn_id, tunnel_id)
                             child_cfg = self.find_child_cfg(child_conn_id)
                             if child_cfg is None:
