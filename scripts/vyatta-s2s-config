@@ -133,7 +133,7 @@ if ( $updown ne '' ) {
 
     if ( $action eq 'down' ) {
         if ( -f $vfp_ifindex_fn ) {
-            chomp( $vfp_ifindex = read_file($vfp_ifindex_fn) );
+            $vfp_ifindex = read_file($vfp_ifindex_fn);
             unlink $vfp_ifindex_fn;
         }
     }
@@ -144,14 +144,22 @@ if ( $updown ne '' ) {
         write_file( $vfp_ifindex_fn, $vfp_ifindex );
     }
 
+    chomp($vfp_ifindex) if defined($vfp_ifindex);
     chomp( my $vrf_id =
           read_file( '/sys/class/net/' . $overlay_vrf . '/ifindex' ) );
+
+    printf("  s2s-config: if %s vrf %s vfp %s\n",
+           defined($interface) ? $interface : "N/A",
+           defined($overlay_vrf) ? $overlay_vrf : "N/A",
+           defined($vfp_ifname) ? $vfp_ifname : "N/A")
+        if $debug > 1;
 
     # The order of the MARK rule is important. Needs to come before
     # BYPASS rule.
     s2s_handle_updown_overlay_vrf_mark(
         $peer,  $peerclient, $myclient, $action,    $af,
-        $proto, $lport,      $rport,    $interface, $overlay_vrf
+        $proto, $lport,      $rport,    $interface, $overlay_vrf,
+        $vfp_ifname
     );
 
     s2s_handle_updown_bypass(
@@ -165,7 +173,7 @@ if ( $updown ne '' ) {
         my $sel_if = undef;
 
         # 'lo' stands for the default VRF
-        if ( $overlay_vrf ne 'lo' ) {
+        if ( $overlay_vrf ne 'lo' or !defined($interface) ) {
             $sel_if = $vfp_ifindex;
         }
 
@@ -310,20 +318,23 @@ sub s2s_handle_updown_bypass {
 sub s2s_handle_updown_overlay_vrf_mark {
     my (
         $peer,  $pcl,   $mycl,  $action,    $af,
-        $proto, $lport, $rport, $interface, $overlay_vrf
+        $proto, $lport, $rport, $interface, $overlay_vrf,
+        $vfp_ifname
     ) = @_;
 
     my $iptables = "OUTPUT --table mangle --jump MARK";
 
+    my $markifn;
+    if (defined($interface)) {
+        $markifn = $interface;
+    } elsif (defined($vfp_ifname)) {
+        $markifn = $vfp_ifname;
+    } else {
+        $markifn = $overlay_vrf;
+    }
+
     my $mark;
-    if ( defined $interface ) {
-        chomp( $mark =
-              read_file( '/sys/class/net/' . $interface . '/ifindex' ) );
-    }
-    else {
-        chomp( $mark =
-              read_file( '/sys/class/net/' . $overlay_vrf . '/ifindex' ) );
-    }
+    chomp( $mark = read_file( '/sys/class/net/' . $markifn . '/ifindex' ) );
     $iptables .= " --set-mark $mark";
 
     if ( defined $interface ) {
@@ -356,6 +367,10 @@ sub s2s_handle_updown_overlay_vrf_mark {
     }
     my $cmd = ( $af eq '4' ) ? "iptables" : "ip6tables";
     $cmd .= " $act $iptables";
+
+    print("  MARK CMD: $cmd\n")
+        if $debug > 0;
+
     my $out = `$cmd 1>/dev/null 2>&1`;
     if ($?) {
         print STDERR "bind iptables: $cmd failed: $out\n";
@@ -423,9 +438,9 @@ sub send_vfp_cmd {
         $vfp_action = "get";
     }
 
-    print("  CSTORE: KEY vfp $ifindex $ifname s2s\n")
+    print("  CSTORE(vfp): KEY vfp $ifindex $ifname s2s\n")
       if $debug > 1;
-    print("  CSTORE: CMD vfp $ifindex $ifname s2s $vfp_action\n")
+    print("  CSTORE(vfp): CMD vfp $ifindex $ifname s2s $vfp_action\n")
       if $debug > 0;
     $cstore->store(
         "vfp $ifindex $ifname s2s", "vfp $ifindex $ifname s2s $vfp_action",
@@ -440,7 +455,6 @@ sub send_vfp_cmd {
 #                                   <dst port <src port> <proto> <sel if>
 sub send_bind_cmd {
     my ( $cstore, $action, $config, $sel_if, $config_pb ) = @_;
-    my $s2s_action = "detach";
 
     if ( $action eq "SET" ) {
 	$config_pb->{action} = CryptoPolicyConfig::Action::ATTACH;
@@ -460,9 +474,9 @@ sub send_bind_cmd {
         $config_pb->{sel_ifindex} = $sel_if;
     }
 
-    print("  CSTORE: KEY s2s $config\n")
+    print("  CSTORE(bind): KEY s2s $config\n")
       if $debug > 1;
-    print("  CSTORE: CMD s2s $s2s_action $config\n")
+    print("  CSTORE(bind): CMD s2s $action $config\n")
       if $debug > 0;
     $cstore->store_pb( "s2s $config", $config_pb, "vyatta:crypto-policy",
         undef, "$action" );
