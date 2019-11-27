@@ -387,6 +387,18 @@ class ChildConfig(SA):
 
     def initiate(self, vs, **kwargs):
         with self.lock:
+            current_ike_cfg = self.get_conn().current_ike_cfg
+            if current_ike_cfg:
+                for child_id in current_ike_cfg.childs:
+                    child = current_ike_cfg.get_child(child_id)
+                    if child.logical_id != self.logical_id:
+                        continue
+
+                    if child.get_state() == SAState.ESTABLISHED:
+                        info(LOG.CONN, 'Child SA already established for {}'
+                             ', skipping.'.format(self.logical_id))
+                        return
+
             sa = OrderedDict()
             sa['child'] = self.conn_id
             try:
