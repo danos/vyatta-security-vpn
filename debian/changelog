@@ -1,3 +1,17 @@
+vyatta-security-vpn (1.42) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * ike-sa-daemon: RA VPN client loads cfg only for single source-interface
+  * op-vici: in/out bytes in "show vpn ipsec sa" were swapped
+
+  [ Mark Gillott ]
+  * Select correct ifindex for use as MARK in iptables (Fixes: VRVDR-48094)
+
+  [ Daniel Gollub ]
+  * ike-sa-daemon: don't re-initiate old Child SAs, after failover
+
+ -- Daniel Gollub <dgollub@att.com>  Fri, 29 Nov 2019 11:28:12 +0100
+
 vyatta-security-vpn (1.41) unstable; urgency=medium
 
   [ Mike Manning ]
