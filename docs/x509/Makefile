@@ -18,8 +18,8 @@ OCSP = "http://ocsp.example.com:8888"
 CRL  = "http://crl.example.com:8000/test.crl"
 
 ifneq ($(SAN),)
-SAN_REQEXT="-reqexts SAN"
-SAN_EXT="-extensions SAN"
+SAN_REQEXT=-reqexts SAN
+SAN_EXT=-extensions SAN
 endif
 
 ifneq ($(OCSP),)
