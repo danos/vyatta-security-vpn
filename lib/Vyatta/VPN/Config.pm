@@ -1,6 +1,6 @@
 #
 # **** License ****
-# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2017-2020, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2015-2017, Brocade Communications Systems, Inc.
 # All Rights Reserved.
 #
@@ -30,6 +30,7 @@ our @EXPORT_OK = qw($LOCAL_KEY_FILE_DEFAULT rsa_get_local_key_file
   conv_protocol_all
   get_config_tunnel_desc get_tunnel_id_by_profile
   get_address_by_tunnel_id
+  vpn_vrf_change_prepare vpn_vrf_change_complete
   get_profiles_for_cli);
 our %EXPORT_TAGS = ( ALL => [@EXPORT_OK] );
 
@@ -41,6 +42,12 @@ Readonly our $LOCAL_KEY_FILE_DEFAULT =>
   '/opt/vyatta/etc/config/ipsec.d/rsa-keys/localhost.key';
 
 Readonly our $CONFIG_KEYFILE_PATH => 'rsa-keys local-key file';
+
+my $dbus_args = '';
+my $dbus_intf = 'net.vyatta.eng.security.vpn.ipsec';
+my $dbus_path = '/net/vyatta/eng/security/vpn/ipsec';
+my $dbus_cmd =
+"/usr/bin/dbus-send --type=method_call --system --dest=$dbus_intf $dbus_path $dbus_intf";
 
 sub rsa_get_local_key_file {
     my $file = $LOCAL_KEY_FILE_DEFAULT;
@@ -96,6 +103,53 @@ sub validate_local_key_file {
     }
 
     return 1;
+}
+
+#
+# Notify IKE daemon if any tunnel is affected by impending VRF
+# change.
+#
+sub vpn_vrf_change_prepare {
+    my ($intf) = @_;
+
+    my $rprof = 'ipsec remote-access-client profile';
+
+    my $vcVPN = Vyatta::Config->new('security vpn');
+    my @profs = $vcVPN->listNodes($rprof);
+
+    my @conns;
+    for my $prof (@profs) {
+        my @servers = $vcVPN->listNodes("$rprof $prof server");
+        for my $server (@servers) {
+            my @tuns = $vcVPN->listNodes("$rprof $prof tunnel");
+            for my $tun (@tuns) {
+                my $vfp = $vcVPN->returnValue("$rprof $prof tunnel $tun uses");
+                if ( $intf eq $vfp ) {
+                    my $conn =
+                        'ipsec_ra_client-'
+                      . $prof . '-'
+                      . $server
+                      . '-tunnel-'
+                      . $tun;
+                    push( @conns, $conn );
+                }
+            }
+        }
+    }
+
+    if ( scalar @conns ) {
+        my $conns = join( ',', @conns );
+        system "$dbus_cmd\.vrf_change_prepare array:string:$conns";
+    }
+}
+
+#
+# Notify IKE daemon that VRF change is complete.
+#
+sub vpn_vrf_change_complete {
+    my ($intf) = @_;
+
+    system "$dbus_cmd\.vrf_change_complete";
 }
 
 =item get_config_tunnel_desc()

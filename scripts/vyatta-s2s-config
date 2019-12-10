@@ -3,7 +3,7 @@
 # Module: vyatta-s2s-config
 #
 # **** License ****
-# Copyright (c) 2018-2019 AT&T Intellectual Property.
+# Copyright (c) 2018-2020 AT&T Intellectual Property.
 # All rights reserved.
 #
 # Copyright (c) 2016-2017 Brocade Communications Systems, Inc.
@@ -145,8 +145,13 @@ if ( $updown ne '' ) {
     }
 
     chomp($vfp_ifindex) if defined($vfp_ifindex);
-    chomp( my $vrf_id =
-          read_file( '/sys/class/net/' . $overlay_vrf . '/ifindex' ) );
+    my $vrf_id;
+    if ( -f '/sys/class/net/' . $vfp_ifname . '/master/ifindex') {
+        chomp( $vrf_id =
+             read_file( '/sys/class/net/' . $vfp_ifname . '/master/ifindex' ) );
+    } else {
+        $vrf_id = 1;
+    }
 
     printf("  s2s-config: if %s vrf %s vfp %s\n",
            defined($interface) ? $interface : "N/A",
