@@ -1,3 +1,16 @@
+vyatta-security-vpn (1.43) unstable; urgency=medium
+
+  [ Erik Ziegenbalg ]
+  * Enable v3_OCSP extension
+  * Fix SAN extension " " bug
+
+  [ Mark Gillott ]
+  * Set disable_xfrm as well as disable_policy (Fixes: VRVDR-48094)
+
+  [ Daniel Gollub ]
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 12 Dec 2019 09:39:05 +0100
+
 vyatta-security-vpn (1.42) unstable; urgency=medium
 
   [ Daniel Gollub ]
