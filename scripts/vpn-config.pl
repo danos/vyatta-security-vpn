@@ -1427,11 +1427,11 @@ EOF
     if ( is_vpn_running() ) {
         if ($update_interval && ($update_interval != $update_interval_orig)) {
             print "Re-starting IPsec daemon to activate new auto-update interval...\n";
-            vpn_exec( 'systemctl restart strongswan.service',
+            vpn_exec( '/opt/vyatta/sbin/vyatta-restart-vpn restart',
                       're-starting ipsec with updated auto-update interval $update_interval' );
         } elsif (!$update_interval && $update_interval_orig) {
             print "Re-starting IPsec daemon to deactivate auto-update...\n";
-            vpn_exec( 'systemctl restart strongswan.service',
+            vpn_exec( '/opt/vyatta/sbin/vyatta-restart-vpn restart',
                       're-starting ipsec' );
         } else {
 	    for my $conn (@CHANGED_IKE_SAS) {
@@ -1447,7 +1447,8 @@ EOF
 		      'update changes to ipsec.conf and update' );
         }
     } else {
-        vpn_exec( 'systemctl restart strongswan.service', 'start/restart ipsec' );
+        vpn_exec( '/opt/vyatta/sbin/vyatta-restart-vpn restart',
+                  'start/restart ipsec' );
     }
   }
 }

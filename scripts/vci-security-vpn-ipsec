@@ -131,7 +131,7 @@ if __name__ == "__main__":
     PP = pprint.PrettyPrinter(indent=2)
     syslog.openlog('vci-security-vpn-ipsec', facility=syslog.LOG_DAEMON)
 
-    os.system("systemctl start strongswan.service")
+    os.system("/opt/vyatta/sbin/vyatta-restart-vpn start")
 
     if os.getenv("TESTFILE"):
         with open(os.getenv("TESTFILE")) as fd:

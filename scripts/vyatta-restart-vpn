@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+#
+# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# All rights reserved.
+
+# SPDX-License-Identifier: GPL-2.0-only
+
+import sys
+import os
+import subprocess
+import syslog
+from vyatta import configd
+
+def configd_client():
+    try:
+        client = configd.Client()
+    except configd.FatalException as f:
+        print("can't connect to configd: {}".format(f))
+        sys.exit(1)
+
+    return client
+
+def check_vrrp_notify(vrrp):
+    if vrrp is None:
+        return
+
+    for group in vrrp.get('vrrp-group'):
+        if 'notify' in group and 'ipsec' in group['notify']:
+            raise VRRPNotifyIPsecFound
+
+def vrrp_state_is_master():
+    res = subprocess.run(['/opt/vyatta/bin/vyatta-op-cmd-wrapper',
+                          'show', 'vrrp'],
+                         stdout=subprocess.PIPE)
+    if res.stdout.decode('utf-8').find('MASTER') == -1:
+        return False
+    else:
+        return True
+
+class VRRPNotifyIPsecFound(Exception):
+    pass
+
+def restart_vpn(verb):
+    cfgpath = 'interfaces'
+    client = configd_client()
+
+    try:
+        intcfg = client.tree_get_dict(cfgpath, configd.Client.CANDIDATE, "json")
+    except:
+        return None
+
+    notify_present = False
+    try:
+        for itype,ilist in intcfg['interfaces'].items():
+            for intf in ilist:
+                check_vrrp_notify(intf.get('vrrp'))
+                if 'vif' in intf:
+                    for vif in intf['vif']:
+                        check_vrrp_notify(vif.get('vrrp'))
+        return
+
+    except VRRPNotifyIPsecFound:
+        notify_present = True
+
+    if notify_present and not vrrp_state_is_master():
+        syslog.syslog(syslog.LOG_ERR,
+                      "Strongswan not started - VRRP notifies IPsec but state not MASTER")
+    else:
+        os.system("systemctl {} strongswan.service".format(verb))
+
+if __name__ == '__main__':
+    opt = sys.argv[1]
+    if opt == 'start' or opt == 'restart':
+        restart_vpn(opt)
+    else:
+        syslog.syslog(syslog.LOG_ERR,
+                      "Invalid option {}".format(opt))
