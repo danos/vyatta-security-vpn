@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# Copyright (c) 2017-2020 AT&T Intellectual Property.
 # All Rights Reserved.
 
 # SPDX-License-Identifier: GPL-2.0-only
@@ -66,9 +66,11 @@ def setup_vici():
         try:
             s.connect("/var/run/charon.vici")
             break
-        except ConnectionRefusedError as e:
+        except (ConnectionRefusedError, FileNotFoundError) as e:
             if retry:
-                os.system('/opt/vyatta/sbin/vyatta-restart-vpn restart')
+                rc = os.system('/opt/vyatta/sbin/vyatta-restart-vpn restart')
+                if rc >> 8 == 1:
+                    return None
                 retry = False
                 time.sleep(2)
             else:

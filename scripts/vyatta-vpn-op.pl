@@ -75,7 +75,7 @@ if ($op eq '') {
 
 if ($op eq 'clear-vpn-ipsec-process') {
   print "Restarting IPsec process...\n";
-  system 'systemctl restart strongswan.service';
+  system ('/opt/vyatta/sbin/vyatta-restart-vpn','restart');
 
   if (is_opennhrp_running()) {
 	system 'systemctl restart opennhrp.service';
