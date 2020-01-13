@@ -1637,10 +1637,12 @@ sub disable_xfrm_policy {
   vpn_exec("sysctl net.ipv4.conf.$intf.disable_xfrm=$on >&/dev/null",
 	     'VPN toggle net.ipv4.conf.intf.disable_xfrm');
   if ( !$skip_ipv6 ) {
+      #
+      # For IPv6 the kernel provides just disable_policy; unlike IPv4
+      # there is no disable_xfrm option.
+      #
       vpn_exec("sysctl net.ipv6.conf.$intf.disable_policy=$on >&/dev/null",
 	       'VPN toggle net.ipv6.conf.intf.disable_policy');
-      vpn_exec("sysctl net.ipv6.conf.$intf.disable_xfrm=$on >&/dev/null",
-	       'VPN toggle net.ipv6.conf.intf.disable_xfrm');
   }
 }
 
