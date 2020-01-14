@@ -1,3 +1,20 @@
+vyatta-security-vpn (1.44) unstable; urgency=medium
+
+  [ Mark Gillott ]
+  * Use policy selector only when an overlay network is in use
+    (Fixes: VRVDR-49344)
+
+  [ Thomas Kiely ]
+  * Don't start Strongswan if VFFP notify ipsec and not MASTER
+  * Handle setup_vici retries
+
+  [ Mark Gillott ]
+  * For IPv6 only need to set disable_policy (Fixes: VRVDR-49630)
+
+  [ Daniel Gollub ]
+
+ -- Daniel Gollub <dgollub@att.com>  Tue, 14 Jan 2020 09:50:04 +0100
+
 vyatta-security-vpn (1.43) unstable; urgency=medium
 
   [ Erik Ziegenbalg ]
