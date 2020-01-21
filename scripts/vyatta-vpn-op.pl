@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2017-2020, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2014-2016 by Brocade Communications Systems, Inc.
 # All rights reserved.
 #
@@ -63,8 +63,8 @@ sub clear_tunnel {
   # Queue terminate/initiate in charon job queues with non-blocking stroke calls.
   # charon/control schedules both with the same priority (medium).
   my $suffix = $childSA ? "{*}" : "";
-  `ipsec stroke down-nb $conn$suffix >&/dev/null`;
-  `ipsec stroke up-nb $conn >&/dev/null`;
+  `ipsec stroke down-nb '$conn$suffix' >&/dev/null`;
+  `ipsec stroke up-nb '$conn' >&/dev/null`;
 
   return;
 }

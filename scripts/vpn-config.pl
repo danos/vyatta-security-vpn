@@ -3,7 +3,7 @@
 # Module: vpn-config.pl
 #
 # **** License ****
-# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2017-2020, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2014-2017, Brocade Communications Systems, Inc.
 # All Rights Reserved.
 #
@@ -1313,12 +1313,12 @@ if ( $vcVPN->exists('ipsec') ) {
       if (!$bound || $deleted || $disabled) {
 	  if ($connectid =~ "(vpnprof-tunnel-|.*-to-.*)") {
 	      # Close inbound connections that are not configured.
-	      vpn_exec("ipsec stroke down-nb $connectid" . "[*]",
-		       "down-nb changed connection $connectid" . "[*]");
+	      vpn_exec("ipsec stroke down-nb '${connectid}[*]'",
+		       "down-nb changed connection '${connectid}[*]'");
 	      # reread+reload should remove the inbound connection definition.
 	      # Run delete anyway just to be sure.
-	      vpn_exec("ipsec stroke delete $connectid",
-		       "delete connection $connectid");
+	      vpn_exec("ipsec stroke delete '$connectid'",
+		       "delete connection '$connectid'");
 	  }
 	  if ($tunnels{$tun}) {
 	      next;
@@ -1435,12 +1435,12 @@ EOF
                       're-starting ipsec' );
         } else {
 	    for my $conn (@CHANGED_IKE_SAS) {
-                vpn_exec( "ipsec stroke down-nb ".$conn."[*]",
-                          "down-nb deleted/changed IKE SA for connection: $conn" );
+                vpn_exec( "ipsec stroke down-nb '${conn}[*]'",
+                          "down-nb deleted/changed IKE SA for connection: '$conn'" );
             }
 	    for my $conn (@CHANGED_CHILD_SAS) {
-                vpn_exec( "ipsec stroke down-nb ".$conn."{*}",
-                          "down-nb deleted/changed Child SA for connection: $conn" );
+                vpn_exec( "ipsec stroke down-nb '${conn}{*}'",
+                          "down-nb deleted/changed Child SA for connection: '$conn'" );
             }
 	    vpn_exec( 'ipsec rereadall >&/dev/null', 're-read secrets' );
 	    vpn_exec( 'ipsec update >&/dev/null',

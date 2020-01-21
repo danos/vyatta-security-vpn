@@ -34,5 +34,5 @@ sub get_deleted_peers {
 }
 
 foreach my $peer (get_deleted_peers()) {
-    system("ipsec stroke down-nb $peer >/dev/null 2>&1");
+    system("ipsec stroke down-nb '$peer' >/dev/null 2>&1");
 }
