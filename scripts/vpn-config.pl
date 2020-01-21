@@ -377,7 +377,7 @@ if ( $vcVPN->exists('ipsec') ) {
       if (grep { /\s+\#pubkey=\S+/ } @lines) {
           copy($local_key_file, $local_key_file . ".raw") || die "cannot backup file $local_key_file";
           vpn_exec("/opt/vyatta/bin/vyatta-pki --raw_to_pem "
-                   . "--file=$local_key_file.raw > $local_key_file",
+                   . "--file='$local_key_file.raw' > '$local_key_file'",
                    'Convert local RSA private key from RAW to PEM format' );
       }
   }
