@@ -1,3 +1,20 @@
+vyatta-security-vpn (1.45) unstable; urgency=medium
+
+  [ Simon Barber ]
+  * Dont load unity plugin.
+
+  [ Mike Manning ]
+  * vyatta-security-vpn-secrets: code injection
+  * vyatta-security-vpn: code injection due to call to check_file_in_config
+  * vyatta-security-vpn: set security vpn ipsec site-to-site peer code injection
+  * vyatta-security-vpn: s2s tunnel protocol code injection
+  * vyatta-security-vpn: set security vpn rsa-keys local-key file code injection
+  * vyatta-security-vpn: l2tp remote-access dhcp-interface code injection
+
+  [ Daniel Gollub ]
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 23 Jan 2020 16:37:12 +0100
+
 vyatta-security-vpn (1.44) unstable; urgency=medium
 
   [ Mark Gillott ]
