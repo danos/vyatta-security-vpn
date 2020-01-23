@@ -4,7 +4,7 @@
 # established or deleted.
 #
 # **** License ****
-# Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+# Copyright (c) 2017-2020, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2016-2017, Brocade Communications Systems, Inc.
 # All Rights Reserved.
 # **** End License ****
@@ -35,6 +35,8 @@ fi
 [ -z $PLUTO_DOMAIN ] && PLUTO_DOMAIN="default"
 [ -z $PLUTO_CFG_INTERFACE ] && PLUTO_CFG_INTERFACE=""
 
+ORIG_PLUTO_CONNECTION=$PLUTO_CONNECTION
+
 # IPsec RA VPN server PLUTO_CONNECTION is not unique
 if [[ $PLUTO_CONNECTION == ipsec-remote-access-server* ]]; then
         PEER_CLIENT=${PLUTO_PEER_CLIENT//\//_}
@@ -49,6 +51,9 @@ up-host:|up-host-v6:|up-client:|up-client-v6:)
         if ! updown $PLUTO_CONNECTION up ; then
             exit 0
         fi
+
+	# restore original PLUTO_CONNECTION for vyatta-s2s-config
+	PLUTO_CONNECTION=$ORIG_PLUTO_CONNECTION
 
 	AF="6"
 	[ "$PLUTO_VERB" == "up-client" ] || [ "$PLUTO_VERB" == "up-host" ] && AF="4"
@@ -79,6 +84,9 @@ down-host:|down-host-v6:|down-client:|down-client-v6:)
         if ! updown $PLUTO_CONNECTION down ; then
             exit 0
         fi
+
+	# restore original PLUTO_CONNECTION for vyatta-s2s-config
+	PLUTO_CONNECTION=$ORIG_PLUTO_CONNECTION
 
 	AF="6"
 	[ "$PLUTO_VERB" == "down-client" ] || [ "$PLUTO_VERB" == "down-host" ] && AF="4"
