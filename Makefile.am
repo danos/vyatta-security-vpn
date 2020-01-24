@@ -28,7 +28,6 @@ sbin_SCRIPTS += scripts/vyatta-ike-sa-daemon
 sbin_SCRIPTS += scripts/vpn-config-vici
 sbin_SCRIPTS += scripts/vyatta-op-vpn-ipsec-vici
 sbin_SCRIPTS += scripts/vpn-config-global-ike
-sbin_SCRIPTS += scripts/vyatta-restart-vpn
 
 bin_SCRIPTS += scripts/convert_key_to_rsasig.pl
 bin_SCRIPTS += scripts/generate_new_rsasig.pl

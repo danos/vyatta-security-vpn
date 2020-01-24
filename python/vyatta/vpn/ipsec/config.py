@@ -68,7 +68,7 @@ def setup_vici():
             break
         except ConnectionRefusedError as e:
             if retry:
-                os.system('/opt/vyatta/sbin/vyatta-restart-vpn restart')
+                os.system('systemctl restart strongswan.service')
                 retry = False
                 time.sleep(2)
             else:
