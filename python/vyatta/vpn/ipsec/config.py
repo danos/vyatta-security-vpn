@@ -247,7 +247,6 @@ class Tunnel:
             else:
                 vfp_intf = None
             if vfp_intf:
-                self.data['interface'] = vfp_intf.encode()
                 if self.vrf_interfaces:
                     routing_instance = self.vrf_interfaces.get(vfp_intf)
                 else:
@@ -255,6 +254,8 @@ class Tunnel:
                 if routing_instance:
                     domain_value = 'vrf' + routing_instance
                     self.data['domain'] = domain_value.encode()
+                    # only set "interface" if VFP is in a non-default VRF
+                    self.data['interface'] = vfp_intf.encode()
 
         return [(self.connection_name(prefix), self.data)]
 
