@@ -274,6 +274,7 @@ class Authentication:
         self.cert = None
         self.certkey = None
         self.local_id = None
+        self.remote_id = None
 
         self.reauth_time = cfg.get('reauth-time')
 
@@ -293,6 +294,10 @@ class Authentication:
         if cfg.get('id'):
             self.local_id = '{}:{}'.format(cfg['id']['type'], cfg['id']['value'])
 
+        if cfg.get('remote-id'):
+            self.remote_id = cfg.get('remote-id')
+
+
     def get(self, name):
         return self.cfg.get(name)
 
@@ -305,6 +310,8 @@ class Authentication:
             local_2 = OrderedDict([('auth', 'eap-gtc'.encode()), ('id', self.username.encode())])
 
             remote = OrderedDict([('auth', 'psk'.encode())])
+            if self.remote_id:
+                remote['id'] = self.remote_id.encode()
 
             return [('local-1', local_1), ('local-2', local_2), ('remote', remote)]
         if self.mode == 'x509':
@@ -314,6 +321,9 @@ class Authentication:
                local_1['id'] = self.local_id.encode()
 
             remote = OrderedDict([('auth', 'pubkey'.encode())])
+            if self.remote_id:
+                remote['id'] = self.remote_id.encode()
+
             if self.revocation:
                remote['revocation'] = self.revocation.encode()
 
@@ -480,6 +490,17 @@ class IPsecRAVPNServerPool():
             return OrderedDict()
 
         pool = OrderedDict([('addrs', self.cfg['subnet'])])
+
+        if self.cfg.get('attributes'):
+            attrs = self.cfg.get('attributes')
+
+            dns_list = []
+            for dns_addr in attrs.get('dns'):
+                dns_list.append(dns_addr.encode())
+
+            if dns_list:
+                pool['dns'] = dns_list
+
         return OrderedDict([(self.pool_name(), pool)])
 
 class IPsecRAVPNServer():

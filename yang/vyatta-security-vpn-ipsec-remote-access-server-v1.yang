@@ -23,7 +23,7 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 		 Web: www.att.com";
 
 	description
-		"Copyright (c) 2018-2019, AT&T Intellectual Property.
+		"Copyright (c) 2018-2020, AT&T Intellectual Property.
 		 All rights reserved.
 
 		 Redistribution and use in source and binary forms, with or
@@ -56,6 +56,12 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 		 SPDX-License-Identifier: BSD-3-Clause
 
 		 The YANG module for vyatta-security-vpn-ipsec-remote-access-server-v1";
+
+	revision 2020-01-24 {
+		description
+			"Added Virtual-IP Pool DNS attribute support.
+			 Added per profile remote-id filtering.";
+	}
 
 	revision 2019-03-26 {
 		description "Initial revision.";
@@ -99,6 +105,23 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 						type types:ipv6-prefix;
 					}
 				}
+				container attributes {
+					description "Configures IKE configuration attributes.";
+					configd:help "IKE configuration attributes";
+
+					leaf-list dns {
+						description "Configures the Internal DNS IPv4 or IPv6
+							address of the Virtual-IP pool.";
+						configd:help "Internal DNS server of the Virtual-IP pool";
+						ordered-by "user";
+						max-elements 16;
+						type union {
+							type types:ipv4-address;
+							type types:ipv6-address;
+						}
+					}
+
+				}
 			}
 			list profile {
 				description "Configures the profile for remote access server";
@@ -132,6 +155,19 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 						configd:help "Reauthentication time in seconds";
 						type uint32 {
 							range 60..86400;
+						}
+					}
+					leaf remote-id {
+						description "Configures a filter which IKE identifies to expect from the remote peers.
+							     Wildcards to match the ids can be used, for examples:
+								- C=US, OU=Marketing, CN=*
+								- *@example.com
+
+							     The matching of the Relative Distinguish Names (RDNs) in the certificate subjects
+							     is strict (type, number and order have too match).";
+						configd:help "Remote IKE identities to expect";
+						type string {
+							length 1..512;
 						}
 					}
 					container x509 {
