@@ -297,7 +297,10 @@ class Authentication:
             err("mode {} not supported".format(cfg['mode']))
 
         if cfg.get('id'):
-            self.local_id = '{}:{}'.format(cfg['id']['type'], cfg['id']['value'])
+            if cfg['id'].get('type'):
+                self.local_id = '{}:{}'.format(cfg['id']['type'], cfg['id']['value'])
+            else:
+                self.local_id = '{}'.format(cfg['id']['value'])
 
         if cfg.get('remote-id'):
             self.remote_id = cfg.get('remote-id')
