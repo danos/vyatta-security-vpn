@@ -201,7 +201,7 @@ def get_dataplane_sad(vrf):
 def get_ipsec_ra_server_profile(conn):
     try:
         conn = conn.split(IPSEC_RA_SERVER_PREFIX)[1]
-        profile = re.split('-', conn)[0]
+        profile = re.split(r'-tunnel-(\d+)$', conn)[0]
     except:
         return None
 
@@ -213,7 +213,8 @@ def configd_query_ipsec_ra_server(profile):
 
 def get_ipsec_ra_client_profile(conn):
     try:
-        profile = re.split('-', conn)[1]
+        conn = conn.split(IPSEC_RA_SERVER_PREFIX)[1]
+        profile = re.split(r'-tunnel-(\d+)$', conn)[0]
     except:
         return None
 
@@ -221,15 +222,15 @@ def get_ipsec_ra_client_profile(conn):
 
 def get_ipsec_ra_client_tunnel(conn):
     try:
-        tunnel = re.split('-', conn)[-1]
+        tunnel = re.search(r'-tunnel-(\d+)$', conn)
     except:
         return None
 
-    return tunnel
+    return tunnel.group(1)
 
 def get_ipsec_ra_client_ip(conn):
     try:
-        ip = re.split('-', conn)[2]
+        ip = re.split('-', conn)[-1]
     except:
         return None
 
