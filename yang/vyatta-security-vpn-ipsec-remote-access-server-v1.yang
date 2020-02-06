@@ -139,6 +139,36 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 				container authentication {
 					description "Configures authentication parameters for remote access server";
 					configd:help "Authentication";
+
+					container id {
+						description "Configures identification for service authentication.";
+						configd:help "Server identification";
+						leaf value {
+							description "Defines the identification value sent to the IPsec Remote-Access client
+								during IKE authentication.";
+							configd:help "Server identification value";
+							type string {
+								length 1..64;
+							}
+						}
+						leaf type {
+							description "Defines the identification type the identification value represents.";
+							configd:help "Server identification type";
+							type enumeration {
+								enum "keyid" {
+									description "Configures identification type ID_KEY_ID, which is an
+										opaque octet stream to hold custom values.";
+									configd:help "ID_KEY_ID / opaque octet stream";
+								}
+								enum "rfc822" {
+									description "Configures identification type ID_RFC822_ADDR,
+										which is a fully-qualified email address string.";
+									configd:help "ID_RFC822_ADDR / email address";
+								}
+							}
+						}
+					}
+
 					leaf mode {
 						description "Configures the mode of authentication";
 						type enumeration {
@@ -146,6 +176,11 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 								description "Configures authentication mode as X.509";
 								configd:help "Use X.509 authentication";
 							}
+							enum "eap-tls" {
+								description "Configures authentication mode as EAP-TLS";
+								configd:help "Use EAP-TLS authentication";
+							}
+
 						}
 						configd:help "Authentication mode";
 						mandatory true;

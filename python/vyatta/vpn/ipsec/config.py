@@ -288,6 +288,11 @@ class Authentication:
             self.cert = cfg['x509']['cert-file']
             self.certkey = cfg['x509']['key']['file']
             self.revocation = cfg['x509'].get('revocation-policy')
+        elif cfg['mode'] == 'eap-tls':
+            self.mode = 'eap-tls'
+            self.cert = cfg['x509']['cert-file']
+            self.certkey = cfg['x509']['key']['file']
+            self.revocation = cfg['x509'].get('revocation-policy')
         else:
             err("mode {} not supported".format(cfg['mode']))
 
@@ -314,7 +319,8 @@ class Authentication:
                 remote['id'] = self.remote_id.encode()
 
             return [('local-1', local_1), ('local-2', local_2), ('remote', remote)]
-        if self.mode == 'x509':
+
+        elif self.mode == 'x509':
             local_1 = OrderedDict([('auth', 'pubkey'.encode())])
             local_1['cert-1'] = OrderedDict([('file', self.cert.encode())])
             if self.local_id:
@@ -328,6 +334,24 @@ class Authentication:
                remote['revocation'] = self.revocation.encode()
 
             return [('local-1', local_1), ('remote-1', remote)]
+
+        elif self.mode == 'eap-tls':
+            local_1 = OrderedDict([('auth', 'pubkey'.encode())])
+            local_1['cert-1'] = OrderedDict([('file', self.cert.encode())])
+            if self.local_id:
+               local_1['id'] = self.local_id.encode()
+
+            remote = OrderedDict([('auth', 'eap-tls'.encode())])
+            if self.remote_id:
+                remote['id'] = self.remote_id.encode()
+
+            remote['eap_id'] = '%any'.encode()
+
+            if self.revocation:
+               remote['revocation'] = self.revocation.encode()
+
+            return [('local-1', local_1), ('remote-1', remote)]
+
         return None
 
     def shared_secrets(self, peers):
@@ -450,6 +474,7 @@ class IPsecRAVPNServerProfile():
 
         profile['version'] = b'2'
         profile['mobike'] = b'no'
+        profile['send_cert'] = b'always'
 
         if self.cfg.get('force-udp-encap'):
             profile['encap'] = b'yes'
