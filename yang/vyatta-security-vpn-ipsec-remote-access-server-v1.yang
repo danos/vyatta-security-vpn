@@ -140,6 +140,10 @@ module vyatta-security-vpn-ipsec-remote-access-server-v1 {
 					description "Configures authentication parameters for remote access server";
 					configd:help "Authentication";
 
+					must "not(mode = 'eap-tls' or mode = 'x509') or (./x509/cert-file and ./x509/key/file)" {
+						error-message "X.509 certificate required with selected authentication method.";
+					}
+
 					container id {
 						description "Configures identification for service authentication.";
 						configd:help "Server identification";
