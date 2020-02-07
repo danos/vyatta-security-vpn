@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.47) unstable; urgency=medium
+
+  * Commit failed in IPsec site-to-site configuration
+
+ -- Mike Manning <mmanning@vyatta.att-mail.com>  Fri, 07 Feb 2020 16:26:41 +0000
+
 vyatta-security-vpn (1.46) unstable; urgency=medium
 
   [ Thomas Kiely ]
