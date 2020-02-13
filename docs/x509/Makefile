@@ -20,10 +20,6 @@ CRL  = "http://crl.example.com:8000/test.crl"
 SAN_REQEXT=-reqexts SAN
 SAN_EXT=-extensions SAN
 
-ifneq ($(OCSP),)
-OCSP_EXT=-extensions v3_OCSP
-endif
-
 all: RSA_$(CN).der RSA_$(CN).p12
 
 sample.cnf:
@@ -84,10 +80,10 @@ ECDSA_$(CN).csr: ECDSA_$(CN).key sample.cnf
 	openssl req -new -nodes -key ECDSA_$(CN).key -out ECDSA_$(CN).csr $(SAN_REQEXTS) -config sample.cnf -subj $(HOST_SUBJECT_ECDSA)
 
 ECDSA_$(CN).pem: ECDSA_$(CN).csr ECDSA_CA.pem sample.cnf
-	openssl ca -batch -config sample.cnf -days $(DAYS) -in ECDSA_$(CN).csr -cert ECDSA_CA.pem -keyfile ECDSA_CA.key -out ECDSA_$(CN).pem -extfile sample.cnf -extensions usr_cert $(SAN_EXT) $(OCSP_EXT)
+	openssl ca -batch -config sample.cnf -days $(DAYS) -in ECDSA_$(CN).csr -cert ECDSA_CA.pem -keyfile ECDSA_CA.key -out ECDSA_$(CN).pem -extfile sample.cnf -extensions usr_cert $(SAN_EXT)
 
 RSA_$(CN).pem: RSA_$(CN).csr RSA_CA.pem sample.cnf
-	openssl ca -batch -config sample.cnf -days $(DAYS) -in RSA_$(CN).csr -cert RSA_CA.pem -keyfile RSA_CA.key -out RSA_$(CN).pem -extfile sample.cnf -extensions usr_cert $(SAN_EXT) $(OCSP_EXT)
+	openssl ca -batch -config sample.cnf -days $(DAYS) -in RSA_$(CN).csr -cert RSA_CA.pem -keyfile RSA_CA.key -out RSA_$(CN).pem -extfile sample.cnf -extensions usr_cert $(SAN_EXT)
 
 ECDSA_$(CN).der: ECDSA_$(CN).pem
 	openssl x509 -outform der -in ECDSA_$(CN).pem -out ECDSA_$(CN).der
