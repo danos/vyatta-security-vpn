@@ -17,16 +17,14 @@ SHA_SIGNED="-SHA256"
 OCSP = "http://ocsp.example.com:8888"
 CRL  = "http://crl.example.com:8000/test.crl"
 
-ifneq ($(SAN),)
 SAN_REQEXT=-reqexts SAN
 SAN_EXT=-extensions SAN
-endif
 
 ifneq ($(OCSP),)
 OCSP_EXT=-extensions v3_OCSP
 endif
 
-all: RSA_$(CN).der
+all: RSA_$(CN).der RSA_$(CN).p12
 
 sample.cnf:
 	touch index.txt
@@ -36,11 +34,10 @@ sample.cnf:
 	cp /etc/ssl/openssl.cnf sample.cnf
 	sed -i 's/demoCA//g' sample.cnf
 	sed -i 's/newcerts//g' sample.cnf
-ifneq ($(SAN),)
 	echo "[SAN]" >> sample.cnf
-	echo 'subjectAltName=$(SAN)' >> sample.cnf
+	echo 'subjectAltName=DNS:$(CN)' >> sample.cnf
 	echo '' >> sample.cnf
-endif
+
 ifneq ($(OCSP),)
 	echo "[v3_OCSP]" >> sample.cnf
 	echo "basicConstraints = CA:FALSE" >> sample.cnf
@@ -53,6 +50,7 @@ endif
 	echo "nsComment = \"vyatta-security-vpn doc sample\"" >> sample.cnf
 	echo "subjectKeyIdentifier=hash" >> sample.cnf
 	echo "authorityKeyIdentifier=keyid,issuer" >> sample.cnf
+	echo "extendedKeyUsage = clientAuth, serverAuth" >> sample.cnf
 ifneq ($(OCSP),)
 	echo "authorityInfoAccess = OCSP;URI:$(OCSP)" >> sample.cnf
 endif
@@ -95,13 +93,13 @@ ECDSA_$(CN).der: ECDSA_$(CN).pem
 	openssl x509 -outform der -in ECDSA_$(CN).pem -out ECDSA_$(CN).der
 
 ECDSA_$(CN).p12: ECDSA_$(CN).pem
-	openssl pkcs12 -export -in ECDSA_$(CN).pem -inkey ECDSA_$(CN).key -out ECDSA_$(CN).p12 -passout "vyatta"
+	openssl pkcs12 -export -in ECDSA_$(CN).pem -inkey ECDSA_$(CN).key -out ECDSA_$(CN).p12 -passout "pass:vyatta"
 
 RSA_$(CN).der:  RSA_$(CN).pem
 	openssl x509 -outform der -in RSA_$(CN).pem -out RSA_$(CN).der
 
 RSA_$(CN).p12:  RSA_$(CN).pem
-	openssl pkcs12 -export -in RSA_$(CN).pem -inkey RSA_$(CN).key -out RSA_$(CN).p12 -passout "vyatta"
+	openssl pkcs12 -export -in RSA_$(CN).pem -inkey RSA_$(CN).key -out RSA_$(CN).p12 -passout "pass:vyatta"
 
 RSA_CA.crl: RSA_CA.pem
 	openssl ca -config sample.cnf -gencrl -keyfile RSA_CA.key -cert RSA_CA.pem -out RSA_CA.crl
@@ -114,4 +112,4 @@ ECDSA_CA.crl: ECDSA_CA.pem
 	openssl ca -config sample.cnf -gencrl -keyfile ECDSA_CA.key -cert ECDSA_CA.pem -out ECDSA_CA.crl
 
 clean:
-	rm -f *.crl *.csr *.pem *.key *.srl *.der *.key1 sample.cnf crlnumber index.txt* serial*
+	rm -f *.crl *.csr *.pem *.key *.srl *.der *.p12 *.key1 sample.cnf crlnumber index.txt* serial*
