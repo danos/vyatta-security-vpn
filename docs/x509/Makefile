@@ -10,9 +10,9 @@ CN   = hostA
 DAYS = 365
 EC   = secp384r1
 DATE = $$( date +%s )
-CA_SUBJECT         = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=Vyatta R&D TEST CA $(DATE)/emailAddress=DL-vyatta-help@att.com"
-HOST_SUBJECT_RSA   = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=$(CN)/emailAddress=$(CN)+rsa@example.com"
-HOST_SUBJECT_ECDSA = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=$(CN)/emailAddress=$(CN)+ecdsa@example.com"
+CA_SUBJECT         = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=Vyatta R&D TEST CA $(DATE)"
+HOST_SUBJECT_RSA   = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=$(CN)"
+HOST_SUBJECT_ECDSA = "/C=US/ST=CA/L=Palo Alto/O=CompanyX/OU=Labs/CN=$(CN)"
 SHA_SIGNED="-SHA256"
 OCSP = "http://ocsp.example.com:8888"
 CRL  = "http://crl.example.com:8000/test.crl"
