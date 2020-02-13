@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2019 AT&T Intellectual Property.
+# Copyright (c) 2018-2020 AT&T Intellectual Property.
 # All rights reserved.
 #
 # Copyright (c) 2016 Brocade Communications Systems, Inc.
@@ -94,8 +94,14 @@ RSA_$(CN).pem: RSA_$(CN).csr RSA_CA.pem sample.cnf
 ECDSA_$(CN).der: ECDSA_$(CN).pem
 	openssl x509 -outform der -in ECDSA_$(CN).pem -out ECDSA_$(CN).der
 
+ECDSA_$(CN).p12: ECDSA_$(CN).pem
+	openssl pkcs12 -export -in ECDSA_$(CN).pem -inkey ECDSA_$(CN).key -out ECDSA_$(CN).p12 -passout "vyatta"
+
 RSA_$(CN).der:  RSA_$(CN).pem
 	openssl x509 -outform der -in RSA_$(CN).pem -out RSA_$(CN).der
+
+RSA_$(CN).p12:  RSA_$(CN).pem
+	openssl pkcs12 -export -in RSA_$(CN).pem -inkey RSA_$(CN).key -out RSA_$(CN).p12 -passout "vyatta"
 
 RSA_CA.crl: RSA_CA.pem
 	openssl ca -config sample.cnf -gencrl -keyfile RSA_CA.key -cert RSA_CA.pem -out RSA_CA.crl
