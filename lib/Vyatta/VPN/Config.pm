@@ -24,13 +24,13 @@ use File::Slurp qw( write_file );
 use parent qw(Exporter);
 
 our @EXPORT_OK = qw($LOCAL_KEY_FILE_DEFAULT rsa_get_local_key_file
-    validate_local_key_file get_ike_modp_default conv_pfs_to_dh_group
-    generate_conn_ike_proposal generate_conn_esp
-    write_charon_logging_conf generate_charon_logging
-    conv_protocol_all
-    get_config_tunnel_desc get_tunnel_id_by_profile
-    get_address_by_tunnel_id
-    get_profiles_for_cli);
+  validate_local_key_file get_ike_modp_default conv_pfs_to_dh_group
+  generate_conn_ike_proposal generate_conn_esp
+  write_charon_logging_conf generate_charon_logging
+  conv_protocol_all
+  get_config_tunnel_desc get_tunnel_id_by_profile
+  get_address_by_tunnel_id
+  get_profiles_for_cli);
 our %EXPORT_TAGS = ( ALL => [@EXPORT_OK] );
 
 use Vyatta::Config;
@@ -38,10 +38,9 @@ use Vyatta::Configd;
 use NetAddr::IP;
 
 Readonly our $LOCAL_KEY_FILE_DEFAULT =>
-    '/opt/vyatta/etc/config/ipsec.d/rsa-keys/localhost.key';
+  '/opt/vyatta/etc/config/ipsec.d/rsa-keys/localhost.key';
 
-Readonly our $CONFIG_KEYFILE_PATH =>
-    'rsa-keys local-key file';
+Readonly our $CONFIG_KEYFILE_PATH => 'rsa-keys local-key file';
 
 sub rsa_get_local_key_file {
     my $file = $LOCAL_KEY_FILE_DEFAULT;
@@ -50,10 +49,13 @@ sub rsa_get_local_key_file {
     # Read configuration tree
     #
     my $vc = Vyatta::Config->new('security vpn');
+
     # Use appropriate function for being (or not) in config session
-    my $returnValue = $vc->inSession() ?
-        \&Vyatta::Config::returnValue : \&Vyatta::Config::returnOrigValue;
-    my $key_file_override = $returnValue->($vc, $CONFIG_KEYFILE_PATH);
+    my $returnValue =
+      $vc->inSession()
+      ? \&Vyatta::Config::returnValue
+      : \&Vyatta::Config::returnOrigValue;
+    my $key_file_override = $returnValue->( $vc, $CONFIG_KEYFILE_PATH );
 
     #
     # We'll assume validation for valid path/file was handled in the
@@ -77,19 +79,19 @@ sub validate_local_key_file {
     if ( $local_key_file ne $LOCAL_KEY_FILE_DEFAULT ) {
         if ( $local_key_file !~ /^\// ) {
             croak "Invalid local RSA key file path \"$local_key_file\"."
-                . "  Does not start with a '/'.\n";
+              . "  Does not start with a '/'.\n";
         }
         if ( $local_key_file =~ /[^a-zA-Z0-9\.\-\_\/]/g ) {
             croak "Invalid local RSA key file path \"$local_key_file\"."
-                . " Contains a character that is not alpha-numeric and not '.', '-', '_', '/'.\n";
+              . " Contains a character that is not alpha-numeric and not '.', '-', '_', '/'.\n";
         }
         if ( $local_key_file =~ /\/\//g ) {
             croak "Invalid local RSA key file path \"$local_key_file\"."
-                . " Contains string \"//\".\n";
+              . " Contains string \"//\".\n";
         }
         if ( -d $local_key_file ) {
             croak "Invalid local RSA key file path \"$local_key_file\"."
-                . " Path is a directory rather than a file.\n";
+              . " Path is a directory rather than a file.\n";
         }
     }
 
@@ -146,9 +148,9 @@ sub get_ike_modp_default {
     my @default_ike_groups = ( 'modp1536', 'modp1024' );
     return @default_ike_groups if not $dh_group;
     return ( $dh_group_to_modp{$dh_group} )
-        if $dh_group =~ /^dh-group/;
-    return ( $dh_group_to_modp{'dh-group' . $dh_group} )
-        if $dh_group;
+      if $dh_group =~ /^dh-group/;
+    return ( $dh_group_to_modp{ 'dh-group' . $dh_group } )
+      if $dh_group;
 
     croak "Could not produce an IKE MODP representation.";
 }
@@ -156,11 +158,11 @@ sub get_ike_modp_default {
 sub conv_protocol_all {
     my ($proto) = @_;
 
-    if ($proto eq 'all') {
+    if ( $proto eq 'all' ) {
         return "%any";
     }
 
-    if ($proto eq 'ipip') {
+    if ( $proto eq 'ipip' ) {
         return "ipencap";
     }
 
@@ -186,11 +188,12 @@ sub generate_conn_ike_proposal {
     $enc_hash .= "-$hash" if $hash ne 'null';
 
     my $genout = $enc_hash;
-    if ( $dh_group ) {
-        my $modp = $dh_group_to_modp{'dh-group' . $dh_group};
+    if ($dh_group) {
+        my $modp = $dh_group_to_modp{ 'dh-group' . $dh_group };
         croak "Invalid diffie-hellman group: $dh_group" if not $modp;
         $genout .= "-$modp";
     } else {
+
         # defaults from default_ike_groups[] in src/pluto/alg_info.c
         $genout .= "-modp1536,$enc_hash-modp1024";
     }
@@ -226,15 +229,20 @@ sub generate_charon_logging {
     my $output_default = '1';
 
     # special handling for "all", "minimal" and "none"
-    if (grep {/^all$/} @logmodes) {
-        $output_default = '2'  ;
+    if ( grep { /^all$/ } @logmodes ) {
+        $output_default = '2';
 
         # silence noise
         $charon_subsystems{'enc'} = '1';
         $charon_subsystems{'job'} = '1';
         $charon_subsystems{'mgr'} = '1';
         $charon_subsystems{'net'} = '1';
-    } elsif (grep {/^minimal$/} @logmodes) {
+    } elsif (
+        grep {
+            /^minimal$/
+        } @logmodes
+      )
+    {
         $output_default = '-1';
 
         $charon_subsystems{'app'} = '1';
@@ -244,7 +252,7 @@ sub generate_charon_logging {
         $charon_subsystems{'mgr'} = '1';
     }
 
-    $output_default = '-1' if grep {/^none$/} @logmodes;
+    $output_default = '-1' if grep { /^none$/ } @logmodes;
 
     # generate subsystem entries
     foreach my $mode (@logmodes) {
@@ -252,18 +260,18 @@ sub generate_charon_logging {
 
         %charon_subsystems = (
             %charon_subsystems,
-            map {split} split /,/,
+            map { split } split /,/,
             $plutodebug_to_charon{$mode}
         );
     }
 
-    my @charon_subsystems
-        = map { "$_ = $charon_subsystems{$_}" } keys %charon_subsystems;
+    my @charon_subsystems =
+      map { "$_ = $charon_subsystems{$_}" } keys %charon_subsystems;
 
-    my $output_subsystems
-        = @charon_subsystems
-        ? join( "\n            ", @charon_subsystems )
-        : '# <subsystem> = <default>';
+    my $output_subsystems =
+      @charon_subsystems
+      ? join( "\n            ", @charon_subsystems )
+      : '# <subsystem> = <default>';
 
     my $output = << "END";
 charon {
@@ -289,13 +297,13 @@ sub write_charon_logging_conf {
     my ( $vc, $filename ) = @_;
 
     $filename = '/etc/strongswan.d/charon-logging.conf'
-        if !defined $filename;
+      if !defined $filename;
 
     my $charon_logging = << "END";
 # generated by vpn-config.pl
 END
-    $charon_logging .= generate_charon_logging(
-        $vc->returnValues('ipsec logging log-modes') );
+    $charon_logging .=
+      generate_charon_logging( $vc->returnValues('ipsec logging log-modes') );
     write_file( $filename, $charon_logging );
     return;
 }
@@ -303,7 +311,7 @@ END
 sub get_tunnel_id_by_profile {
     my ($profile) = @_;
 
-    my $vc = Vyatta::Config->new('security vpn ipsec');
+    my $vc      = Vyatta::Config->new('security vpn ipsec');
     my @tunnels = $vc->listOrigNodes("profile $profile bind tunnel");
 
     return @tunnels;
@@ -312,17 +320,17 @@ sub get_tunnel_id_by_profile {
 sub get_address_by_tunnel_id {
     my ($tun) = @_;
 
-    my $vc = Vyatta::Config->new();
+    my $vc        = Vyatta::Config->new();
     my @addresses = $vc->returnOrigValues("interfaces tunnel $tun address");
 
     # drop mask length
-    my @result = map { (my $addr = $_) =~ s/\/.*//; $addr } @addresses;
+    my @result = map { ( my $addr = $_ ) =~ s/\/.*//; $addr } @addresses;
 
     return @result;
 }
 
 sub get_profiles_for_cli {
-    my $vc = Vyatta::Config->new('security vpn ipsec');
+    my $vc       = Vyatta::Config->new('security vpn ipsec');
     my @profiles = $vc->listOrigNodes('profile');
 
     for my $prof (@profiles) {
