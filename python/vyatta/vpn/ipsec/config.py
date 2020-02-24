@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# Copyright (c) 2017-2020 AT&T Intellectual Property.
 # All Rights Reserved.
 
 # SPDX-License-Identifier: GPL-2.0-only
@@ -10,6 +10,7 @@ import sys
 import time
 import vici
 import dbus
+import syslog
 
 from collections import OrderedDict
 
@@ -38,6 +39,9 @@ DBUS_CONN_RETRIES = 3
 
 def err(msg):
     print(msg, file=sys.stderr)
+
+def dbg(msg):
+    syslog.syslog(syslog.LOG_DEBUG, msg)
 
 IKE_SA_DAEMON = None
 
@@ -547,9 +551,10 @@ class IPsecRAVPNServer():
 
         # Delete stale connections / pools
         existing_conns = vs.get_conns().get('conns')
-        stale_conns = list(filter(lambda x: x.startswith(IPSEC_RA_VPN_SERVER_NAMEPREFIX.encode()) and x not in self.profiles_cfg.keys(), existing_conns))
+        stale_conns = list(filter(lambda x: x.startswith(IPSEC_RA_VPN_SERVER_NAMEPREFIX.encode()) and x.decode() not in self.profiles_cfg.keys(), existing_conns))
         for c in stale_conns:
 
+            dbg("Terminating stale IKE conns {}".format(len(c)))
             # Don't wait for IKE SA delete responses
             stream = vs.terminate(OrderedDict(ike=c, force=b'yes'))
 
@@ -586,4 +591,4 @@ class IPsecRAVPNServer():
 
         vs.load_conn(self.profiles_cfg)
 
-
+syslog.openlog('vci-security-vpn-ipsec', facility=syslog.LOG_DAEMON)
