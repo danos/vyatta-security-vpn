@@ -1,3 +1,11 @@
+vyatta-security-vpn (1.48) unstable; urgency=medium
+
+  * perltidy
+  * Terminate IPsec connections affected by VFP VRF change.
+  * All client connections are terminated when "uses vfp" configured.
+
+ -- Thomas Kiely <tkiely@mail.eng.vyatta.net>  Tue, 25 Feb 2020 09:38:30 +0000
+
 vyatta-security-vpn (1.47) unstable; urgency=medium
 
   * Commit failed in IPsec site-to-site configuration
