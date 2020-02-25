@@ -144,7 +144,8 @@ if ( $vcVPN->exists('l2tp remote-access') ) {
   if (defined ($l2tp_intf)) {
     chomp($l2tp_intf);
     $l2tp_intf =~ s/\./\//g;
-    disable_xfrm_policy($l2tp_intf, 1, 1)
+    vpn_exec("sysctl net.ipv4.conf.$l2tp_intf.disable_policy=1 >&/dev/null",
+             'VPN toggle net.ipv4.conf.intf.disable_policy');
   }
 } elsif ( $vcVPN->isDeleted('l2tp remote-access') && !$vcVPN->exists('ipsec esp-group') ) {
   my $l2tp_intf;
@@ -157,7 +158,8 @@ if ( $vcVPN->exists('l2tp remote-access') ) {
   unless ($l2tp_intf eq '') {
     chomp($l2tp_intf);
     $l2tp_intf =~ s/\./\//g;
-    disable_xfrm_policy($l2tp_intf, 0, 1)
+    vpn_exec("sysctl net.ipv4.conf.$l2tp_intf.disable_policy=0 >&/dev/null",
+             'VPN toggle net.ipv4.conf.<intf>.disable_policy');
   }
 }
 
