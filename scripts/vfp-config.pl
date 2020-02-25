@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# Copyright (c) 2017-2020 AT&T Intellectual Property.
 # All rights reserved.
 #
 
@@ -20,7 +20,7 @@ my $ipsec_ra_vpn_client_prefix = 'ipsec_ra_client';
 my $config = Vyatta::Config->new();
 my $psuf = '.prev';
 
-my $vfp_ipsec_ravpn_server_prefix = VFP_STATE_DIR . "/ipsec-remote-access-server";
+my $vfp_ipsec_ravpn_server_prefix = VFP_STATE_DIR . "ipsec-remote-access-server";
 
 sub write_vfp_state {
     my ($connection, $ifname) = @_;
