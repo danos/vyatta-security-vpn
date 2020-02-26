@@ -527,27 +527,52 @@ class IPsecRAVPNServer():
 
         self._flush_vfp_state()
 
+        vfp_changed_conns = []
+
+        #
+        # Record which if any of the tunnels have changed vfp configuration.
+        # Handle vfp added, vfp changed and vfp removed.
+        #
         for p in self.profiles:
             for t in p.tunnels:
                 prefix = p.conn_name()
                 conn = t.connection_name(prefix)
                 vfp_intf = t.get('vyatta-security-vpn-ipsec-vfp-v1:uses')
-                if vfp_intf is None:
-                    continue
 
                 fn = VFP_STATE_DIR + conn
-                with open(fn, 'w') as f:
-                    f.write(vfp_intf)
+                fn_prev = fn + '.prev'
 
-                try:
-                    os.remove(fn + '.prev')
-                except FileNotFoundError:
-                    pass
+                if os.path.exists(fn_prev):
+                    with open(fn_prev, 'r') as f:
+                        old_vfp_intf = f.read()
+                        if (old_vfp_intf == vfp_intf):
+                            continue
+                    os.remove(fn_prev)
+                elif vfp_intf is None:
+                    continue
+
+                vfp_changed_conns.append(conn)
+
+                if vfp_intf is not None:
+                    with open(fn, 'w') as f:
+                        f.write(vfp_intf)
+        return vfp_changed_conns
 
     def sync(self):
         vs = self.vs
 
-        self._sync_vfp_state()
+        changed_conns = self._sync_vfp_state()
+
+        for conn in changed_conns:
+            param = OrderedDict()
+            param['child'] = conn.encode()
+            param['force'] = True
+            dbg("Terminating conn {} due to vfp configuration change".format(conn))
+            try:
+                for log in vs.terminate(param):
+                    pass
+            except:
+                pass
 
         # Delete stale connections / pools
         existing_conns = vs.get_conns().get('conns')
