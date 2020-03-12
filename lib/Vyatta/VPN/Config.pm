@@ -124,6 +124,7 @@ sub vpn_vrf_change_prepare {
             my @tuns = $vcVPN->listNodes("$rprof $prof tunnel");
             for my $tun (@tuns) {
                 my $vfp = $vcVPN->returnValue("$rprof $prof tunnel $tun uses");
+                next if !defined($vfp);
                 if ( $intf eq $vfp ) {
                     my $conn =
                         'ipsec_ra_client-'
