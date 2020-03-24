@@ -1,3 +1,17 @@
+vyatta-security-vpn (1.50) unstable; urgency=medium
+
+  [ Thomas Kiely ]
+  * Traceback when VRF changed on vfp.
+
+  [ Daniel Gollub ]
+  * RA VPN server: remote-id and pool DNS attribute support
+  * IPsec RA VPN server: EAP-TLS authentication
+  * IPsec RA VPN client/server: handle option local ID type
+  * IPsec RA VPN: fix connection-id parsing
+  * IPsec RA VPN server: x509 cert-file/key/file is mandatory for X.509/EAP-TLS auth
+
+ -- Daniel Gollub <dgollub@att.com>  Tue, 24 Mar 2020 18:22:58 +0100
+
 vyatta-security-vpn (1.49) unstable; urgency=medium
 
   [ Mike Manning ]
