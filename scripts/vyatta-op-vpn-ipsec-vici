@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2017-2019 AT&T Intellectual Property.
+# Copyright (c) 2017-2020 AT&T Intellectual Property.
 # All rights reserved.
 
 # SPDX-License-Identifier: GPL-2.0-only
@@ -33,6 +33,10 @@ IPSEC_RA_CLIENT_PREFIX = 'ipsec_ra_client-'
 IPSEC_RA_SERVER_PREFIX = 'ipsec-remote-access-server-'
 
 DBUS_INTERFACE = 'net.vyatta.eng.security.vpn.ipsec'
+
+class RARole(Enum):
+    CLIENT = 1
+    SERVER = 2
 
 class Mode(Enum):
     BRIEF = 1
@@ -198,28 +202,6 @@ def get_dataplane_sad(vrf):
     except:
         pass
 
-def get_ipsec_ra_server_profile(conn):
-    try:
-        conn = conn.split(IPSEC_RA_SERVER_PREFIX)[1]
-        profile = re.split(r'-tunnel-(\d+)$', conn)[0]
-    except:
-        return None
-
-    return profile
-
-def configd_query_ipsec_ra_server(profile):
-    cfgpath = 'security vpn ipsec remote-access-server profile {}'.format(profile)
-    return configd_query(cfgpath)
-
-def get_ipsec_ra_client_profile(conn):
-    try:
-        conn = conn.split(IPSEC_RA_SERVER_PREFIX)[1]
-        profile = re.split(r'-tunnel-(\d+)$', conn)[0]
-    except:
-        return None
-
-    return profile
-
 def get_ipsec_ra_client_tunnel(conn):
     try:
         tunnel = re.search(r'-tunnel-(\d+)$', conn)
@@ -227,26 +209,6 @@ def get_ipsec_ra_client_tunnel(conn):
         return None
 
     return tunnel.group(1)
-
-def get_ipsec_ra_client_ip(conn):
-    try:
-        ip = re.split('-', conn)[-1]
-    except:
-        return None
-
-    return ip
-
-def configd_query_ipsec_ra_client(profile):
-    cfgpath = 'security vpn ipsec remote-access-client profile {}'.format(profile)
-    return configd_query(cfgpath)
-
-def configd_query_ipsec_ike_group(ike_group):
-    cfgpath = 'security vpn ipsec ike-group {}'.format(ike_group)
-    return configd_query(cfgpath)
-
-def configd_query_ipsec_esp_group(esp_group):
-    cfgpath = 'security vpn ipsec esp-group {}'.format(esp_group)
-    return configd_query(cfgpath)
 
 def configd_client():
     try:
@@ -264,7 +226,6 @@ def configd_query(cfgpath):
         return client.tree_get_dict(cfgpath, configd.Client.RUNNING, "json")
     except:
         return None
-
 
 def dec(string):
     if not string:
@@ -299,23 +260,14 @@ def get_state(val):
         # In the stroke version the else case was undefined
         return 'down'
 
-def dump_ike_sa(conn_id, ike_sa, mode):
+def dump_ike_sa(profile_config, ike_sa, mode):
     if ike_sa.get('child-sas'):
         del ike_sa['child-sas']
 
     #pp.pprint(ike_sa)
 
-    if conn_id.startswith(IPSEC_RA_SERVER_PREFIX):
-        profile = get_ipsec_ra_server_profile(conn_id)
-        profile_config = configd_query_ipsec_ra_server(profile)
-    else:
-        profile = get_ipsec_ra_client_profile(conn_id)
-        profile_config = configd_query_ipsec_ra_client(profile)
-
-
     local_host = conv_ip(ike_sa.get('local-host'))
     remote_host = conv_ip(ike_sa.get('remote-host'))
-    description = profile_config.get('description')
 
     header = """
 Peer ID / IP                            Local ID / IP
@@ -324,8 +276,8 @@ Peer ID / IP                            Local ID / IP
 """
     print(header.format(remote_host, local_host))
 
-    if description:
-        print('Description: {}'.format(description))
+    if profile_config.get('description'):
+        print('Description: {}'.format(profile_config.get('description')))
 
     header = """
     State    Encrypt       Hash    D-H Grp  A-Time  L-Time IKEv
@@ -335,9 +287,7 @@ Peer ID / IP                            Local ID / IP
 
     state = get_state(dec(ike_sa.get('state')))
 
-    # TODO: Is there any VICI way to get the configured ikeliftime?
-    ike_group = configd_query_ipsec_ike_group(profile_config['ike-group'])
-    ikelifetime = ike_group['lifetime']
+    ikelifetime = profile_config.get('ike-lifetime')
 
     ikeatime = dec_for_print(ike_sa.get('established'))
 
@@ -349,17 +299,7 @@ Peer ID / IP                            Local ID / IP
     print('    {:<6} {:<13} {:<9} {:<8} {:<7} {:<7} {:<2}'.format(
         state, enc, hash, dhgrp, ikeatime, ikelifetime, ike_ver))
 
-
-
-
-def dump_child_sa(conn_id, child_sas, ike_sa, mode, vrf):
-
-    if conn_id.startswith(IPSEC_RA_SERVER_PREFIX):
-        profile = get_ipsec_ra_server_profile(conn_id)
-        profile_config = configd_query_ipsec_ra_server(profile)
-    else:
-        profile = get_ipsec_ra_client_profile(conn_id)
-        profile_config = configd_query_ipsec_ra_client(profile)
+def dump_child_sa(profile_config, child_sas, ike_sa, mode, vrf):
 
     local_host = conv_ip(ike_sa.get('local-host'))
     local_id = dec_for_print(ike_sa.get('local-id'))
@@ -369,8 +309,6 @@ def dump_child_sa(conn_id, child_sas, ike_sa, mode, vrf):
     remote_port = dec_for_print(ike_sa.get('remote-port'))
     nat_local = conv_ip(ike_sa.get('nat-local'))
     nat_remote = conv_ip(ike_sa.get('nat-remote'))
-
-    description = profile_config.get('description')
 
     # BRIEF / STATS header
     if mode == Mode.BRIEF or mode == Mode.STATS:
@@ -395,8 +333,8 @@ NAT Dest Port:\t\t{natdst}
 """.format(peerip=remote_host, peerid=remote_id, localip=local_host, localid=local_id, natt='n/a', natsrc=nat_local, natdst=nat_remote)
         print(header_detailed)
 
-    if description:
-        print('Description: {}'.format(description))
+    if profile_config.get('description'):
+        print('Description: {}'.format(profile_config.get('description')))
 
     if mode == Mode.BRIEF:
         header_brief = """
@@ -531,71 +469,85 @@ NAT Dest Port:\t\t{natdst}
 
     print("\n\n")
 
+def get_ipsec_ra_configs(role):
 
+    ret = {}
 
-def show_ipsec_sa(mode=Mode.BRIEF, vrf=None, show_ike=False):
+    if role == RARole.CLIENT:
+        role_name = "remote-access-client"
+    elif role == RARole.SERVER:
+        role_name = "remote-access-server"
+    else:
+        raise ValueError
+
+    config = configd_query('security vpn ipsec {} profile'.format(role_name))
+    if not config:
+        return {}
+
+    for p in config.get('profile'):
+
+        ike_group = {}
+
+        if p.get('ike-group'):
+            ike_group = configd_query('security vpn ipsec ike-group {}'.format(p.get('ike-group')))
+
+        profile_config = {
+            "description": p.get('description'),
+            "profile-name": p.get('profile-name'),
+            "ike-lifetime": ike_group.get('lifetime'),
+            "serveraddr": [],
+            }
+
+        if role == RARole.SERVER:
+            connid = IPSEC_RA_SERVER_PREFIX + p.get('profile-name')
+            ret[connid] = profile_config
+            continue
+
+        for server in p.get('server'):
+            serveraddr = server.get('serveraddr')
+            profile_config['serveraddr'].append(serveraddr)
+            if not server.get('source-interface'):
+                connid = "{}{}-{}".format(IPSEC_RA_CLIENT_PREFIX, p.get('profile-name'), serveraddr)
+                ret[connid] = profile_config
+                continue
+
+            for source_interface in server.get('source-interface'):
+                ifname = source_interface.get('ifname')
+                connid = "{}{}-{}-{}".format(IPSEC_RA_CLIENT_PREFIX, p.get('profile-name'), ifname, serveraddr)
+                ret[connid] = profile_config
+
+    return ret
+
+def show_ipsec_sa(mode=Mode.BRIEF, vrf=None, show_ike=False, peer=None):
 
     vs = setup_vici()
 
-    # VICI exclusive conns
-    try:
-        vici_conns = vs.get_conns()['conns']
-    except:
-        vici_conns = []
+    ra_client = get_ipsec_ra_configs(RARole.CLIENT)
+    ra_server = get_ipsec_ra_configs(RARole.SERVER)
+    configs = {**ra_client, **ra_server}
 
-    for sa in vs.list_sas():
-        for conn_id in sa:
-
-            # Handle only VICI connections for now
-            if not enc(conn_id) in vici_conns:
-                continue
-
-            ike_sa = sa[conn_id]
-
-            # IKE_SA
-            if show_ike:
-                dump_ike_sa(conn_id, ike_sa, mode)
-                continue
-
-            # CHILD_SA
-            dump_child_sa(conn_id, ike_sa.get('child-sas'), ike_sa, mode, vrf)
+    for connid in configs.keys():
+        profile_config = configs[connid]
+        filter_ike = {'ike': connid}
+        for list_sa_event in vs.list_sas(filter_ike):
+            for ike_config in list_sa_event:
+                ike_sa = list_sa_event[ike_config]
 
 
-def show_ike_sa(mode=Mode.BRIEF, vrf=None):
-    show_ipsec_sa(vrf=vrf, show_ike=True)
+                if peer and peer != conv_ip(ike_sa.get('remote-host')):
+                    continue
 
-def show_ipsec_sa_peer(peer, mode=Mode.BRIEF, vrf=None, show_ike=False):
-    vs = setup_vici()
+                # IKE_SA
+                if show_ike:
+                    dump_ike_sa(profile_config, ike_sa, mode)
+                    continue
 
-    # VICI exclusive conns
-    try:
-        vici_conns = vs.get_conns()['conns']
-    except:
-        vici_conns = []
+                # CHILD_SA
+                dump_child_sa(profile_config, ike_sa.get('child-sas'), ike_sa, mode, vrf)
 
-    for sa in vs.list_sas():
-        for conn_id in sa:
 
-            # Handle only VICI connections for now
-            if not enc(conn_id) in vici_conns:
-                continue
-
-            ike_sa = sa[conn_id]
-
-            if dec(ike_sa.get('remote-host')) != peer:
-                continue
-
-            # IKE_SA
-            if show_ike:
-                dump_ike_sa(conn_id, ike_sa, mode)
-                continue
-
-            # CHILD_SA
-            dump_child_sa(conn_id, ike_sa.get('child-sas'), ike_sa, mode, vrf)        	
-
-def show_ike_sa_peer(peer):
-    vs = setup_vici()
-    show_ipsec_sa_peer(peer, show_ike=True)
+def show_ike_sa(mode=Mode.BRIEF, vrf=None, peer=None):
+    show_ipsec_sa(vrf=vrf, show_ike=True, peer=peer)
 
 def get_ra_server_peers_for_cli():
     vs = setup_vici()
@@ -628,58 +580,26 @@ def get_ra_server_peers_for_cli():
 
 
 def get_ra_client_peers_for_cli():
-    vs = setup_vici()
-    try:
-        vici_conns = vs.get_conns()['conns']
-    except:
-        vici_conns = []
+    peers = {}
 
-    ips = {}
+    configs = get_ipsec_ra_configs(RARole.CLIENT)
 
-    for conn in vici_conns:
-        if not conn.startswith(IPSEC_RA_CLIENT_PREFIX):
-            continue
+    for connid in configs:
+        config = configs[connid]
+        for n in config.get('serveraddr'):
+            peers[n] = True
 
-        ip = get_ipsec_ra_client_ip(dec(conn))
-        if ip:
-            ips[ip] = True
+    for peer in peers.keys():
+        print(peer)
 
-    for ip in ips.keys():
-        print(ip)
-
-def get_ipsec_ra_client_profiles(vrf=None, prefix=IPSEC_RA_CLIENT_PREFIX):
-    vs = setup_vici()
-
-    # VICI exclusive conns
-    try:
-        vici_conns = vs.get_conns()['conns']
-    except:
-        vici_conns = []
-
-    profiles = {}
-
-    for conn_id in vici_conns:
-        conn_id = dec(conn_id)
-        if not conn_id.startswith(prefix):
-            continue
-
-        if prefix == IPSEC_RA_CLIENT_PREFIX:
-            profile = get_ipsec_ra_client_profile(conn_id)
-        elif prefix == IPSEC_RA_SERVER_PREFIX:
-            profile = get_ipsec_ra_server_profile(conn_id)
-
-        if profile:
-            profiles[profile] = True
-
-    for profile in profiles.keys():
-        print(profile)
-
-def get_ipsec_ra_server_profiles(vrf=None):
-    get_ipsec_ra_client_profiles(vrf, prefix=IPSEC_RA_SERVER_PREFIX)
+def get_ipsec_ra_profiles(role, vrf=None):
+    configs = get_ipsec_ra_configs(role)
+    for connid in configs:
+        print(configs[connid].get('profile-name'))
 
 def reset_ipsec_ra_client_profile(profile, vrf=None):
 
-    conn_id = 'ipsec_ra_client-{}'.format(profile)
+    conn_id = IPSEC_RA_CLIENT_PREFIX + profile
 
     try:
         service = setup_dbus()
@@ -692,7 +612,6 @@ def reset_ipsec_ra_client_profile(profile, vrf=None):
     except dbus.DBusException as e:
         print("Failed to trigger reset of remote-access-client profile \"{}\": {}".format(profile, e))
         sys.exit(1)
-
 
 def reset_ipsec_ra_server_peer(profile, peer):
     client = configd_client()
@@ -777,21 +696,21 @@ if __name__ == '__main__':
             elif a == 'stats':
                 show_ipsec_sa(mode=Mode.STATS, vrf=vrf)
         elif o in ('--show-ike-sa-peer'):
-            show_ike_sa_peer(a)
+            show_ike_sa(peer=a)
         elif o in ('--show-ipsec-sa-peer'):
-            show_ipsec_sa_peer(a)
+            show_ipsec_sa(peer=a)
         elif o in ('--show-ipsec-sa-stats-peer'):
-            show_ipsec_sa_peer(a, mode=Mode.STATS)
+            show_ipsec_sa(peer=a, mode=Mode.STATS)
         elif o in ('--show-ipsec-sa-peer-detail'):
-            show_ipsec_sa_peer(a, mode=Mode.DETAILED)
+            show_ipsec_sa(peer=a, mode=Mode.DETAILED)
         elif o in ('--get-ra-client-peers-for-cli'):
             get_ra_client_peers_for_cli()
         elif o in ('--get-ra-server-peers-for-cli'):
             get_ra_server_peers_for_cli()
         elif o in ('--get-all-ipsec-ra-client-profiles'):
-            get_ipsec_ra_client_profiles(vrf=vrf)
+            get_ipsec_ra_profiles(RARole.CLIENT, vrf=vrf)
         elif o in ('--get-all-ipsec-ra-server-profiles'):
-            get_ipsec_ra_server_profiles(vrf=vrf)
+            get_ipsec_ra_profiles(RARole.SERVER, vrf=vrf)
         elif o in ('--reset-ipsec-ra-client-profiles'):
             reset_ipsec_ra_client_profile(a, vrf=vrf)
         elif o in ('--reset-ipsec-ra-server-peer'):
