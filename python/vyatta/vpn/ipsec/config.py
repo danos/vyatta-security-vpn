@@ -587,6 +587,8 @@ class IPsecRAVPNServer():
                 prefix = p.conn_name()
                 conn = t.connection_name(prefix)
                 vfp_intf = t.get('vyatta-security-vpn-ipsec-vfp-v1:uses')
+                if vfp_intf is None:
+                    vfp_intf = t.get('uses')
 
                 fn = VFP_STATE_DIR + conn
                 fn_prev = fn + '.prev'
