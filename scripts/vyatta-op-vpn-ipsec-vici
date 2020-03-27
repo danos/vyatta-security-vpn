@@ -7,23 +7,21 @@
 
 import os
 import sys
-import time
 import socket
 import re
 import getopt
-import dbus
-import vici
+import pprint
 
 from enum import Enum
+
+import dbus
+import vici
 
 from vplaned import Controller
 from vyatta import configd
 
 from vyatta.vpn.ipsec.config import setup_dbus
 
-from collections import OrderedDict
-
-import pprint
 pp = pprint.PrettyPrinter()
 
 
@@ -55,11 +53,11 @@ def conv_ts(val):
 
     try:
         val = dec(val[0])
-    except:
+    except BaseException:
         return 'n/a', 'n/a', 'n/a'
 
     proto = 'all'
-    port  = 'all'
+    port = 'all'
 
     m = re.match(r'([^\s\[]*)(\[.*\])?', val)
     net = m.group(1)
@@ -77,73 +75,71 @@ def conv_blocked(val):
         return 'n/a'
 
 def conv_bytes(kern_bytes, dp_bytes):
-    bytes = 0
+    bytes_val = 0
 
     if kern_bytes:
-        bytes += kern_bytes
+        bytes_val += kern_bytes
 
     if dp_bytes:
-        bytes += dp_bytes
+        bytes_val += dp_bytes
 
     suffix = ''
-    # FIXME: do we need to migrate this perl thing?
-    #$bytes =~ s/\s+$//;
-    if bytes >= 1073741824:
-        bytes /= 1073741824
+    if bytes_val >= 1073741824:
+        bytes_val /= 1073741824
         suffix = 'G'
-    elif bytes >= 1048576:
-        bytes /= 1048576
+    elif bytes_val >= 1048576:
+        bytes_val /= 1048576
         suffix = 'M'
-    elif bytes >= 1024:
-        bytes /= 1024
+    elif bytes_val >= 1024:
+        bytes_val /= 1024
         suffix = 'K'
 
-    bytes = '{:.1f}{}'.format(bytes, suffix)
-    return bytes
+    bytes_val = '{:.1f}{}'.format(bytes_val, suffix)
+    return bytes_val
 
-def conv_enc(enc, enc_keysize):
-    if not enc:
+def conv_enc(cipher, cipher_keysize):
+    if not cipher:
         return 'n/a'
 
-    if enc.startswith('3DES'):
+    if cipher.startswith('3DES'):
         return '3des'
 
-    if not enc_keysize:
+    if not cipher_keysize:
         return 'n/a'
 
-    enc_map = {}
-    enc_map['AES_GCM_16'] = 'AES_GCM_128'
+    cipher_map = {}
+    cipher_map['AES_GCM_16'] = 'AES_GCM_128'
 
-    if enc_map.get(enc):
-        enc = enc_map.get(enc)
+    if cipher_map.get(cipher):
+        cipher = cipher_map.get(cipher)
 
-    enc = enc + '_' + enc_keysize
-    enc = enc.split('_')
-    if len(enc) == 4:
+    cipher = cipher + '_' + cipher_keysize
+    cipher = cipher.split('_')
+    if len(cipher) == 4:
         return '{}{}{}{}'.format(
-                enc[0].lower(),
-                enc[3],
-                enc[1].lower(),
-                int(enc[2].lower()))
-    elif len(enc) == 3:
+            cipher[0].lower(),
+            cipher[3],
+            cipher[1].lower(),
+            int(cipher[2].lower()))
+    elif len(cipher) == 3:
         return '{}{}'.format(
-                enc[0].lower(),
-                enc[2])
+            cipher[0].lower(),
+            cipher[2])
     return 'n/a'
 
-def conv_hash(hash):
-    if not hash:
+def conv_prf(prf):
+    if not prf:
         return 'null'
 
-    if hash.startswith('AUTH_'):
-        hash = hash.replace('AUTH_', '')
-    elif hash.startswith('PRF_'):
-        hash = hash.replace('PRF_', '')
+    if prf.startswith('AUTH_'):
+        prf = prf.replace('AUTH_', '')
+    elif prf.startswith('PRF_'):
+        prf = prf.replace('PRF_', '')
 
-    if hash.startswith('HMAC_'):
-        hash = hash.replace('HMAC_', '')
+    if prf.startswith('HMAC_'):
+        prf = prf.replace('HMAC_', '')
 
-    hash = hash.lower()
+    prf = prf.lower()
 
     # legacy hash tokens for show commands as with strongswan 4.x
     #
@@ -157,32 +153,32 @@ def conv_hash(hash):
     hash_map['sha2_512_256'] = 'sha2_512'
     hash_map['aes_xcbc_96'] = 'aesxcbc'
 
-    if hash_map.get(hash):
-        return hash_map.get(hash)
+    if hash_map.get(prf):
+        return hash_map.get(prf)
 
-    return hash
+    return prf
 
 def conv_dh_group(dhgrp):
     if dhgrp == 'MODP_768':
         dh_group = 1
     elif dhgrp == 'MODP_1024':
-       dh_group = 2
+        dh_group = 2
     elif dhgrp == 'MODP_1536':
-       dh_group = 5
+        dh_group = 5
     elif dhgrp == 'MODP_2048':
-       dh_group = 14
+        dh_group = 14
     elif dhgrp == 'MODP_3072':
-       dh_group = 15
+        dh_group = 15
     elif dhgrp == 'MODP_4096':
-       dh_group = 16
+        dh_group = 16
     elif dhgrp == 'MODP_6144':
-       dh_group = 17
+        dh_group = 17
     elif dhgrp == 'MODP_8192':
-       dh_group = 18
+        dh_group = 18
     elif dhgrp == 'ECP_256':
-       dh_group = 19
+        dh_group = 19
     elif dhgrp == 'ECP_384':
-       dh_group = 20
+        dh_group = 20
     else:
         dh_group = 'n/a'
 
@@ -199,22 +195,21 @@ def get_dataplane_sad(vrf):
                         cmd = 'ipsec sad'
 
                     return dp.json_command(cmd)
-    except:
+    except BaseException:
         pass
 
 def get_ipsec_ra_client_tunnel(conn):
-    try:
-        tunnel = re.search(r'-tunnel-(\d+)$', conn)
-    except:
-        return None
+    match = re.search(r'-tunnel-(\d+)$', conn)
+    if match:
+        return match.group(1)
 
-    return tunnel.group(1)
+    return None
 
 def configd_client():
     try:
         client = configd.Client()
-    except configd.FatalException as f:
-        print("can't connect to configd: {}".format(f))
+    except configd.FatalException as e:
+        print("can't connect to configd: {}".format(e))
         sys.exit(1)
 
     return client
@@ -224,7 +219,7 @@ def configd_query(cfgpath):
 
     try:
         return client.tree_get_dict(cfgpath, configd.Client.RUNNING, "json")
-    except:
+    except BaseException:
         return None
 
 def dec(string):
@@ -260,7 +255,7 @@ def get_state(val):
         # In the stroke version the else case was undefined
         return 'down'
 
-def dump_ike_sa(profile_config, ike_sa, mode):
+def dump_ike_sa(profile_config, ike_sa):
     if ike_sa.get('child-sas'):
         del ike_sa['child-sas']
 
@@ -291,22 +286,20 @@ Peer ID / IP                            Local ID / IP
 
     ikeatime = dec_for_print(ike_sa.get('established'))
 
-    enc = conv_enc(dec(ike_sa.get('encr-alg')), dec(ike_sa.get('encr-keysize')))
-    hash = conv_hash(dec(ike_sa.get('prf-alg')))
+    cipher = conv_enc(dec(ike_sa.get('encr-alg')), dec(ike_sa.get('encr-keysize')))
+    prf = conv_prf(dec(ike_sa.get('prf-alg')))
     dhgrp = conv_dh_group(dec(ike_sa.get('dh-group')))
     ike_ver = dec_for_print(ike_sa.get('version'))
 
     print('    {:<6} {:<13} {:<9} {:<8} {:<7} {:<7} {:<2}'.format(
-        state, enc, hash, dhgrp, ikeatime, ikelifetime, ike_ver))
+        state, cipher, prf, dhgrp, ikeatime, ikelifetime, ike_ver))
 
 def dump_child_sa(profile_config, child_sas, ike_sa, mode, vrf):
 
     local_host = conv_ip(ike_sa.get('local-host'))
     local_id = dec_for_print(ike_sa.get('local-id'))
-    local_port = dec_for_print(ike_sa.get('local-port'))
     remote_host = conv_ip(ike_sa.get('remote-host'))
     remote_id = dec_for_print(ike_sa.get('remote-id'))
-    remote_port = dec_for_print(ike_sa.get('remote-port'))
     nat_local = conv_ip(ike_sa.get('nat-local'))
     nat_remote = conv_ip(ike_sa.get('nat-remote'))
 
@@ -330,7 +323,9 @@ Local ID:\t\t{localid}
 NAT Traversal:\t\t{natt}
 NAT Source Port:\t{natsrc}
 NAT Dest Port:\t\t{natdst}
-""".format(peerip=remote_host, peerid=remote_id, localip=local_host, localid=local_id, natt='n/a', natsrc=nat_local, natdst=nat_remote)
+""".format(peerip=remote_host, peerid=remote_id, localip=local_host, localid=local_id,
+           natt='n/a', natsrc=nat_local, natdst=nat_remote)
+
         print(header_detailed)
 
     if profile_config.get('description'):
@@ -400,14 +395,16 @@ NAT Dest Port:\t\t{natdst}
         state = get_state(dec(sa.get('state')))
 
         atime = dec(sa.get('install-time'))
-        life = int(dec(sa.get('life-time'))) + int(atime) # total lifetime = install-time + life-time
+
+        # total lifetime = install-time + life-time
+        life = int(dec(sa.get('life-time'))) + int(atime)
 
         lsnet, lproto, lport = conv_ts(sa.get('local-ts'))
         rsnet, rproto, rport = conv_ts(sa.get('remote-ts'))
 
 
-        enc = conv_enc(dec(sa.get('encr-alg')), dec(sa.get('encr-keysize')))
-        hash = conv_hash(dec(sa.get('integ-alg')))
+        cipher = conv_enc(dec(sa.get('encr-alg')), dec(sa.get('encr-keysize')))
+        integ = conv_prf(dec(sa.get('integ-alg')))
 
         pfsgrp = conv_dh_group(dec(sa.get('dh-group')))
 
@@ -415,21 +412,21 @@ NAT Dest Port:\t\t{natdst}
         bytes_in = int(dec(sa.get('bytes-in')))
         bytes_out = int(dec(sa.get('bytes-out')))
 
-        bytes_in  = conv_bytes(bytes_in, dp_spi_in.get('bytes'))
+        bytes_in = conv_bytes(bytes_in, dp_spi_in.get('bytes'))
         bytes_out = conv_bytes(bytes_out, dp_spi_out.get('bytes'))
-        bytesp    = '{}/{}'.format(bytes_out, bytes_in)
+        bytesp = '{}/{}'.format(bytes_out, bytes_in)
 
         if state == 'up':
             if dp_spi_in.get('blocked') or dp_spi_out.get('blocked'):
                 state = 'down'
 
         # blocked
-        inblocked  = conv_blocked(dp_spi_in.get('blocked'))
+        inblocked = conv_blocked(dp_spi_in.get('blocked'))
         outblocked = conv_blocked(dp_spi_out.get('blocked'))
 
         if mode == Mode.BRIEF:
             print('    {:<7} {:<11} {:<6} {:<14} {:<13} {:<9} {:<2} {:<7} {:<7}'.format(
-                tunnelnum, sa_id, state, bytesp, enc, hash, pfsgrp, atime, life))
+                tunnelnum, sa_id, state, bytesp, cipher, integ, pfsgrp, atime, life))
         elif mode == Mode.DETAILED:
             detailed_tunnel_1 = """
     Tunnel {tunnum}:
@@ -437,9 +434,12 @@ NAT Dest Port:\t\t{natdst}
         Id:\t\t\t{saId}
         Inbound SPI:\t\t{inspi}
         Outbound SPI:\t\t{outspi}
-        Encryption:\t\t{enc}
-        Hash:\t\t\t{hash}
-        DH Group:\t\t{pfsgrp}""".format(tunnum=tunnelnum, state=state, saId=sa_id, inspi=spi_in, outspi=spi_out, enc=enc, hash=hash, pfsgrp=pfsgrp)
+        Encryption:\t\t{cipher}
+        Hash:\t\t\t{integ}
+        DH Group:\t\t{pfsgrp}""".format(tunnum=tunnelnum, state=state, saId=sa_id,
+                                        inspi=spi_in, outspi=spi_out, cipher=cipher,
+                                        integ=integ, pfsgrp=pfsgrp)
+
             print(detailed_tunnel_1)
 
             detailed_tunnel_2 = """
@@ -458,7 +458,11 @@ NAT Dest Port:\t\t{natdst}
         Outbound Blocked:\t{outblocked}
 
         Active Time (s):\t{atime}
-        Lifetime (s):\t\t{life}""".format(srcnet=lsnet, lproto=lproto, lport=lport, dstnet=rsnet, rproto=rproto, rport=rport, inbytes=bytes_in, outbytes=bytes_out, inblocked=inblocked, outblocked=outblocked, atime=atime, life=life)
+        Lifetime (s):\t\t{life}""".format(srcnet=lsnet, lproto=lproto, lport=lport,
+                                          dstnet=rsnet, rproto=rproto, rport=rport,
+                                          inbytes=bytes_in, outbytes=bytes_out,
+                                          inblocked=inblocked, outblocked=outblocked,
+                                          atime=atime, life=life)
             print(detailed_tunnel_2)
 
         elif mode == Mode.STATS:
@@ -513,7 +517,8 @@ def get_ipsec_ra_configs(role):
 
             for source_interface in server.get('source-interface'):
                 ifname = source_interface.get('ifname')
-                connid = "{}{}-{}-{}".format(IPSEC_RA_CLIENT_PREFIX, p.get('profile-name'), ifname, serveraddr)
+                connid = "{}{}-{}-{}".format(IPSEC_RA_CLIENT_PREFIX, p.get('profile-name'),
+                                             ifname, serveraddr)
                 ret[connid] = profile_config
 
     return ret
@@ -539,21 +544,21 @@ def show_ipsec_sa(mode=Mode.BRIEF, vrf=None, show_ike=False, peer=None):
 
                 # IKE_SA
                 if show_ike:
-                    dump_ike_sa(profile_config, ike_sa, mode)
+                    dump_ike_sa(profile_config, ike_sa)
                     continue
 
                 # CHILD_SA
                 dump_child_sa(profile_config, ike_sa.get('child-sas'), ike_sa, mode, vrf)
 
 
-def show_ike_sa(mode=Mode.BRIEF, vrf=None, peer=None):
+def show_ike_sa(vrf=None, peer=None):
     show_ipsec_sa(vrf=vrf, show_ike=True, peer=peer)
 
 def get_ra_server_peers_for_cli():
     vs = setup_vici()
     try:
         vici_ike = vs.list_sas()
-    except:
+    except BaseException:
         vici_ike = []
 
     peers = {}
@@ -565,17 +570,17 @@ def get_ra_server_peers_for_cli():
 
             ike_sa = list_conn_event[ike_conn_name]
             rhost = dec(ike_sa.get('remote-host'))
-            rid = dec(ike_sa.get('remote-id'))
 
             if rhost:
                 peers[rhost] = True
 
             # Printing full X.509 seems to be unfeasible,
             # too long string on CLI.
+            #rid = dec(ike_sa.get('remote-id'))
             #if rid:
             #    peers[rid] = True
 
-    for peer in peers.keys():
+    for peer in peers:
         print(peer)
 
 
@@ -589,28 +594,29 @@ def get_ra_client_peers_for_cli():
         for n in config.get('serveraddr'):
             peers[n] = True
 
-    for peer in peers.keys():
+    for peer in peers:
         print(peer)
 
-def get_ipsec_ra_profiles(role, vrf=None):
+def get_ipsec_ra_profiles(role):
     configs = get_ipsec_ra_configs(role)
     for connid in configs:
         print(configs[connid].get('profile-name'))
 
-def reset_ipsec_ra_client_profile(profile, vrf=None):
+def reset_ipsec_ra_client_profile(profile):
 
     conn_id = IPSEC_RA_CLIENT_PREFIX + profile
 
     try:
         service = setup_dbus()
     except ConnectionRefusedError as e:
-        err("Failed to connect to IKE SA daemon\n")
+        print("Failed to connect to IKE SA daemon\n")
         sys.exit(1)
 
     try:
         service.reset([conn_id], dbus_interface=DBUS_INTERFACE)
     except dbus.DBusException as e:
-        print("Failed to trigger reset of remote-access-client profile \"{}\": {}".format(profile, e))
+        print("Failed to trigger reset of remote-access-client profile \"{}\": {}"
+              .format(profile, e))
         sys.exit(1)
 
 def reset_ipsec_ra_server_peer(profile, peer):
@@ -631,7 +637,8 @@ def setup_vici():
     return vici.Session()
 
 def usage():
-    print('\nusage: {} [--show-(ike|ipsec)-sa=(brief|detail|stats)] [--vrf=<vrfname>]'.format(os.path.basename(sys.argv[0])))
+    print('\nusage: {} [--show-(ike|ipsec)-sa=(brief|detail|stats)] [--vrf=<vrfname>]'
+          .format(os.path.basename(sys.argv[0])))
     print('\t\t[--get-ra-client-peers-for-cli]')
     print('\t\t[--show-(ike|ipsec)-sa-peer=<peer>]')
     print('\t\t[--get-all-ipsec-ra-client-profiles]')
@@ -642,18 +649,18 @@ def usage():
 if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], '',
-                ['show-ike-sa=', 'vrf=', 'profile=',
-                    'show-ipsec-sa=', 'show-ike-sa-peer=',
-                    'show-ipsec-sa-peer=',
-                    'show-ipsec-sa-stats-peer=',
-                    'show-ipsec-sa-peer-detail=',
-                    'get-all-ipsec-ra-client-profiles',
-                    'get-all-ipsec-ra-server-profiles',
-                    'reset-ipsec-ra-client-profile=',
-                    'reset-ipsec-ra-server-peer=',
-                    'get-ra-server-peers-for-cli',
-                    'get-ra-client-peers-for-cli',
-                    'flush-certs'])
+                                   ['show-ike-sa=', 'vrf=', 'profile=',
+                                    'show-ipsec-sa=', 'show-ike-sa-peer=',
+                                    'show-ipsec-sa-peer=',
+                                    'show-ipsec-sa-stats-peer=',
+                                    'show-ipsec-sa-peer-detail=',
+                                    'get-all-ipsec-ra-client-profiles',
+                                    'get-all-ipsec-ra-server-profiles',
+                                    'reset-ipsec-ra-client-profile=',
+                                    'reset-ipsec-ra-server-peer=',
+                                    'get-ra-server-peers-for-cli',
+                                    'get-ra-client-peers-for-cli',
+                                    'flush-certs'])
     except getopt.GetoptError as err:
         print(err)
         usage()
@@ -663,13 +670,13 @@ if __name__ == '__main__':
         sys.exit(0)
 
 
-    vrf = None
-    profile = None
+    vrf_arg = None
+    profile_arg = None
 
     for o, a in opts:
-        if o in ('--profile'):
-            profile = a
-        elif o in ('--vrf'):
+        if o in '--profile':
+            profile_arg = a
+        elif o in '--vrf':
             try:
                 vrf_ifindex_path = '/sys/class/net/vrf{}/ifindex'.format(a)
                 with open(vrf_ifindex_path, mode='r', encoding='utf-8') as f:
@@ -678,44 +685,44 @@ if __name__ == '__main__':
                 print("Could not find routing-instance \"{}\".".format(a))
                 sys.exit(1)
 
-            vrf = {'name': a, 'id': vrf_id }
+            vrf_arg = {'name': a, 'id': vrf_id}
 
     for o, a in opts:
-        if o in ('--show-ike-sa'):
+        if o in '--show-ike-sa':
             if a == 'brief':
-                show_ike_sa(mode=Mode.BRIEF, vrf=vrf)
+                show_ike_sa(vrf=vrf_arg)
             elif a == 'detail':
                 print("Detailed IKE SA show command not implemented.")
             elif a == 'stats':
                 print("Statistic IKE SA show command not implemented.")
-        elif o in ('--show-ipsec-sa'):
+        elif o in '--show-ipsec-sa':
             if a == 'brief':
-                show_ipsec_sa(mode=Mode.BRIEF, vrf=vrf)
+                show_ipsec_sa(mode=Mode.BRIEF, vrf=vrf_arg)
             elif a == 'detail':
-                show_ipsec_sa(mode=Mode.DETAILED, vrf=vrf)
+                show_ipsec_sa(mode=Mode.DETAILED, vrf=vrf_arg)
             elif a == 'stats':
-                show_ipsec_sa(mode=Mode.STATS, vrf=vrf)
-        elif o in ('--show-ike-sa-peer'):
+                show_ipsec_sa(mode=Mode.STATS, vrf=vrf_arg)
+        elif o in '--show-ike-sa-peer':
             show_ike_sa(peer=a)
-        elif o in ('--show-ipsec-sa-peer'):
+        elif o in '--show-ipsec-sa-peer':
             show_ipsec_sa(peer=a)
-        elif o in ('--show-ipsec-sa-stats-peer'):
+        elif o in '--show-ipsec-sa-stats-peer':
             show_ipsec_sa(peer=a, mode=Mode.STATS)
-        elif o in ('--show-ipsec-sa-peer-detail'):
+        elif o in '--show-ipsec-sa-peer-detail':
             show_ipsec_sa(peer=a, mode=Mode.DETAILED)
-        elif o in ('--get-ra-client-peers-for-cli'):
+        elif o in '--get-ra-client-peers-for-cli':
             get_ra_client_peers_for_cli()
-        elif o in ('--get-ra-server-peers-for-cli'):
+        elif o in '--get-ra-server-peers-for-cli':
             get_ra_server_peers_for_cli()
-        elif o in ('--get-all-ipsec-ra-client-profiles'):
-            get_ipsec_ra_profiles(RARole.CLIENT, vrf=vrf)
-        elif o in ('--get-all-ipsec-ra-server-profiles'):
-            get_ipsec_ra_profiles(RARole.SERVER, vrf=vrf)
-        elif o in ('--reset-ipsec-ra-client-profiles'):
-            reset_ipsec_ra_client_profile(a, vrf=vrf)
-        elif o in ('--reset-ipsec-ra-server-peer'):
-            reset_ipsec_ra_server_peer(profile, a)
-        elif o in ('--flush-certs'):
+        elif o in '--get-all-ipsec-ra-client-profiles':
+            get_ipsec_ra_profiles(RARole.CLIENT)
+        elif o in '--get-all-ipsec-ra-server-profiles':
+            get_ipsec_ra_profiles(RARole.SERVER)
+        elif o in '--reset-ipsec-ra-client-profiles':
+            reset_ipsec_ra_client_profile(a)
+        elif o in '--reset-ipsec-ra-server-peer':
+            reset_ipsec_ra_server_peer(profile_arg, a)
+        elif o in '--flush-certs':
             flush_certs()
         elif o in ('--vrf', '--profile'):
             # skip, already processed.

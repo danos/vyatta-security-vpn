@@ -82,3 +82,5 @@ check:
 	perlcritic -5 .
 	pylint3 -d R,too-many-lines,invalid-name,missing-docstring \
 		scripts/vyatta-ike-sa-daemon
+	pylint3 -d R,too-many-lines,invalid-name,missing-docstring,import-error \
+		scripts/vyatta-op-vpn-ipsec-vici
