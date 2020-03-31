@@ -531,7 +531,7 @@ def show_ipsec_sa(mode=Mode.BRIEF, vrf=None, show_ike=False, peer=None):
     ra_server = get_ipsec_ra_configs(RARole.SERVER)
     configs = {**ra_client, **ra_server}
 
-    for connid in configs.keys():
+    for connid in configs:
         profile_config = configs[connid]
         filter_ike = {'ike': connid}
         for list_sa_event in vs.list_sas(filter_ike):
