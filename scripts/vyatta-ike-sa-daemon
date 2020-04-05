@@ -57,6 +57,7 @@ PATHMON_DBUS_OBJECT = '/net/vyatta/monitord/v1/state'
 
 DAEMON_NAME = 'vyatta-ike-sa-daemon'
 DAEMON_CONF = '/var/run/vyatta-ike-sa-daemon/config.json'
+DAEMON_CONF_VCI = '/var/run/vci-security-vpn-ipsec/vci.conf'
 
 tunnels_in_vrf_transition = {}
 
@@ -1866,14 +1867,24 @@ class Daemon:
         self.ike_cfgs = OrderedDict()
         self.child_cfgs = OrderedDict()
 
+        config_file = DAEMON_CONF_VCI
+        if os.path.exists(DAEMON_CONF):
+            config_file = DAEMON_CONF
+
         try:
-            with open(DAEMON_CONF) as fd:
+            with open(config_file) as fd:
                 top_cfg = json.load(fd)
         except IOError as e:
             # (re)boot case
             dbg(LOG.EVENT, '[CFG] could not get the full tree from configuration file: {}'
                 .format(e))
             return
+
+        try:
+            if config_file == DAEMON_CONF_VCI:
+                top_cfg = top_cfg['vyatta-security-v1:security']['vyatta-security-vpn-ipsec-v1:vpn']
+        except KeyError:
+            top_cfg = None
 
         # Logging
         self._read_config_logging(top_cfg)
