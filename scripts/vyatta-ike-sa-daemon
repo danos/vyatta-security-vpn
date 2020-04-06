@@ -151,7 +151,7 @@ class SAError(Exception):
     def __init__(self, error_code, delay):
         self.error_code = error_code
         self.delay = delay
-        msg = "SA Error occured with error code: {} and delay: {}".format(error_code, delay)
+        msg = "SA Error occurred with error code: {} and delay: {}".format(error_code, delay)
         super(SAError, self).__init__(msg)
 
 class AuthSAError(SAError):
@@ -160,7 +160,7 @@ class AuthSAError(SAError):
 class ChildSAErrors(Exception):
     def __init__(self, child_exceptions):
         self.child_exceptions = child_exceptions
-        msg = "ChildSA Errors occured with {} child(s)".format(len(child_exceptions))
+        msg = "ChildSA Errors occurred with {} child(s)".format(len(child_exceptions))
         super(ChildSAErrors, self).__init__(msg)
 
 class PathMonBlindException(Exception):
@@ -686,7 +686,7 @@ class IPsecRAVPNClient(Conn):
             self.current_ike_cfg.initiate(vs, failover=failover,
                                           last_server=self.is_using_last_server)
 
-            # Reset error iterations, once succesfully connected.
+            # Reset error iterations, once successfully connected.
             self.reset_delay_iterations()
 
             notice(LOG.CONN, 'initiate IPsec RA VPN client: {} using IKE SA: {} completed.'
@@ -1048,7 +1048,7 @@ class UpDownBaseJob(Job):
         try:
             conn_obj.initiate(vs, failover=failover)
         except AuthSAError as e:
-            notice(LOG.CONN, 'initiate recieved authentication failure: {}. '
+            notice(LOG.CONN, 'initiate received authentication failure: {}. '
                    'rescheduling initiate job in {} seconds.'.format(conn_obj.conn_id, e.delay))
             reschedule = True
             reschedule_delay = e.delay
@@ -1178,7 +1178,7 @@ class PathMonStateChangeJob(Job):
         self.daemon.path_monitor_state[(self.monitor, self.policy)] = state
 
 
-        # 1. recalculate the sate for all IKEConfigs
+        # 1. recalculate the state for all IKEConfigs
         ike_cfgs = []
         for conn_id in conn_ids:
             ike_cfg = self.daemon.find_ike_cfg(conn_id)
@@ -1230,7 +1230,7 @@ class PathMonStateChangeJob(Job):
                 dbg(LOG.PATHMON, '\tike_cfg: {} conn.current_ike_cfg: {}'
                     .format(ike_cfg.conn_id, conn.current_ike_cfg))
 
-            # currenlty in transition
+            # currently in transition
             if conn.get_state() in (SAState.CONNECTING, SAState.DESTROYING, SAState.UNKNOWN):
                 dbg(LOG.PATHMON, '\tRESULT: skip: current conn in transition:{} {}'
                     .format(conn.get_state(), ike_cfg.conn_id))
@@ -1900,7 +1900,7 @@ class Daemon:
 
 
         with self.lock_conns_job_queue:
-            # create fo each connection a dedicated PriorityQueue
+            # create for each connection a dedicated PriorityQueue
             for conn_id in self.conns:
                 if self.conns_job_queue.get(conn_id) is None:
                     self.conns_job_queue[conn_id] = PriorityQueue()
@@ -2081,7 +2081,7 @@ class Daemon:
             except SkipJobException:
                 pass
             except Exception as e: # pylint: disable=broad-except
-                err(LOG.JOB, 'Job ({}) exception occured: {}'.format(job.name, e))
+                err(LOG.JOB, 'Job ({}) exception occurred: {}'.format(job.name, e))
                 tb = traceback.format_exc()
                 err(LOG.JOB, tb)
             finally:
@@ -2269,7 +2269,7 @@ class Daemon:
         job.remove_job()
 
         # https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes
-        # entry count avoids comparsion breakage
+        # entry count avoids comparison breakage
         with self.job_count_lock:
             _count = next(self.job_count)
 
