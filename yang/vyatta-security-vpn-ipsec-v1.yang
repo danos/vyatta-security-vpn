@@ -57,6 +57,9 @@ module vyatta-security-vpn-ipsec-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
+	revision 2020-04-07 {
+		description "Call site-to-site stale-tunnel teardown hook only once";
+	}
 	revision 2019-11-19 {
 		description "Deprecate optional compression as no longer implemented";
 	}
@@ -497,10 +500,10 @@ Example usage : 'aA1-&!@,.:_2Bb'
 				container site-to-site {
 					presence "true";
 					configd:help "Site to site VPN";
+					configd:begin "/opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/configd_begin.pl";
 					list peer {
 						configd:help "VPN peer";
 						configd:validate "/opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/peer/configd_validate1.cli";
-						configd:begin "/opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/peer/configd_begin.pl";
 						key "tagnode";
 						leaf tagnode {
 							type string;
