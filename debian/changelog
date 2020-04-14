@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.54) unstable; urgency=medium
+
+  * yang: call s2s stale-tunnel tear down hook only once
+
+ -- Daniel Gollub <dgollub@att.com>  Tue, 14 Apr 2020 13:46:32 +0200
+
 vyatta-security-vpn (1.53) unstable; urgency=medium
 
   [ Daniel Gollub ]
