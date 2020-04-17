@@ -600,59 +600,7 @@ sub show_ike_sa_natt {
 }
 
 sub show_ike_secrets {
-    my @secret_files = qw(/etc/ipsec.secrets /etc/dmvpn.secrets);
-    foreach my $secret_file (@secret_files) {
-        unless ( -r $secret_file ) {
-            die "No secrets file $secret_file\n";
-        }
-        my $lines = read_file($secret_file, array_ref => 1, err_mode => 'quiet',
-                              chomp => 1);
-        # if $lines isn't defined, then the read_file() failed
-
-        foreach my $line (@{$lines}) {
-            if ( $line =~ /PSK/ ) {
-                my ( $lip, $pip, $lid, $pid, $secret )
-                    = ( '', '', 'N/A', 'N/A', '' );
-                ($secret) = $line =~ /.*:\s+PSK\s+(\"\S+\")/;
-                ( $lip, $pip ) = $line =~ /^(\S+)\s+(\S+)\s+\:\s+PSK\s+\"\S+\"/;
-
-           # This processing with depend heavily on the way we write ipsec.secrets
-           # lines with 3 entries are tagged by the config module so that we can
-           # tell if the 3rd entry is a localid or peerid (left or right)
-                if ( !defined($lip) ) {
-                    if ( $line
-                        =~ /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+\:\s+PSK\s+\"\S+\"/ )
-                    {
-                        ( $lip, $pip, $lid, $pid ) = ( $1, $2, $3, $4 );
-                    }
-                    elsif ( $line
-                        =~ /^(\S+)\s+(\S+)\s+(\S+)\s+\:\s+PSK\s+\"\S+\".*\#(.*)\#/
-                        )
-                    {
-                        ( $lip, $pip ) = ( $1, $2 );
-                        if ( $4 eq 'RIGHT' ) {
-                            $pid = $3;
-                        }
-                        else {
-                            $lid = $3;
-                        }
-                    }
-                }
-                $lip = '0.0.0.0' if !defined $lip;
-                $pip = '0.0.0.0' if !defined $pip;
-                $pip = '0.0.0.0' if ( $pip eq '%any' );
-                print <<EOH;
-Local IP/ID                             Peer IP/ID
------------                             -----------
-EOH
-                printf "%-39s %-39s\n", $lip, $pip;
-                printf "%-39s %-39s\n\n", substr( $lid, 0, 39 ),
-                    substr( $pid, 0, 39 );
-                print "    Secret: $secret\n";
-                print "\n\n";
-            }
-        }
-    }
+    print "This command is obsolete\n";
     exit 0;
 }
 
