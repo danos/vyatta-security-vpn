@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.55) unstable; urgency=medium
+
+  * Deprecate "show vpn ike secrets"
+
+ -- Simon Barber <sbarber@mail.eng.vyatta.net>  Mon, 20 Apr 2020 17:22:38 +0100
+
 vyatta-security-vpn (1.54) unstable; urgency=medium
 
   * yang: call s2s stale-tunnel tear down hook only once
