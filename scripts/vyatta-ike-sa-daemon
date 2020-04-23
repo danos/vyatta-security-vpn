@@ -11,6 +11,7 @@ import json
 import os.path
 import pprint
 import random
+import re
 import sched
 import threading
 from threading import Event, Thread, RLock, Condition
@@ -2143,6 +2144,10 @@ class Daemon:
                 child_sas = values.get('child-sas')
                 for child_conn_id, _ in child_sas.items():
 
+                    # strongswan 5.8.2 sends unique child SAs unames.
+                    # strip the unique id away, since it breaks child config lookup.
+                    child_conn_id = re.sub(r'-([0-9]+)$', '', child_conn_id)
+
                     child_cfg = self.find_child_cfg(child_conn_id)
 
                     if child_cfg is None:
@@ -2193,6 +2198,10 @@ class Daemon:
             elif event == b'child-updown':
                 child_sas = values.get('child-sas')
                 for child_conn_id, _ in child_sas.items():
+
+                    # strongswan 5.8.2 sends unique child SAs unames.
+                    # strip the unique id away, since it breaks child config lookup.
+                    child_conn_id = re.sub(r'-([0-9]+)$', '', child_conn_id)
 
                     child_cfg = self.find_child_cfg(child_conn_id)
 
