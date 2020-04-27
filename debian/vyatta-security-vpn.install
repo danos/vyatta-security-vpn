@@ -7,3 +7,4 @@
 opt/vyatta/share
 etc/systemd/system/strongswan.service.d/
 python/vyatta/vpn/ipsec/*.py usr/lib/python3/dist-packages/vyatta/vpn/ipsec
+tmpfiles.d/vyatta-ipsec.conf usr/lib/tmpfiles.d
