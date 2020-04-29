@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.56) unstable; urgency=medium
+
+  * Avoid setup-race between VCI and non-VCI code
+
+ -- Daniel Gollub <dgollub@att.com>  Wed, 29 Apr 2020 10:28:19 +0200
+
 vyatta-security-vpn (1.55) unstable; urgency=medium
 
   * Deprecate "show vpn ike secrets"
