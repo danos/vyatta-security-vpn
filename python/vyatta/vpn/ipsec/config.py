@@ -392,6 +392,8 @@ class ClientProfile:
             self.tunnels = []
         self.auth = Authentication(cfg['authentication'])
         self.local_addr = cfg.get('local-address')
+        if self.local_addr == 'any':
+            self.local_addr = '%any'
         self.install_virtual_ip_on = cfg.get('install-vip-on')
 
     def conn_name(self, peer, oif):
@@ -463,6 +465,8 @@ class IPsecRAVPNServerProfile():
 
         self.auth = Authentication(cfg['authentication'])
         self.local_addr = cfg.get('local-address')
+        if self.local_addr == 'any':
+            self.local_addr = '%any'
 
 
     def conn_name(self):
