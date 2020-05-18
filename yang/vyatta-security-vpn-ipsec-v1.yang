@@ -19,7 +19,7 @@ module vyatta-security-vpn-ipsec-v1 {
 	contact
 		"AT&T Inc.
 		 Postal: 280 S. Akard Street
-		         Dallas, TX 25202
+		         Dallas, TX 75202
 		 Web: www.att.com";
 
 	description
@@ -57,6 +57,9 @@ module vyatta-security-vpn-ipsec-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
+	revision 2020-06-25 {
+		description "Correct contact details";
+	}
 	revision 2020-05-27 {
 		description "Obsolete hash sha1_160";
 	}

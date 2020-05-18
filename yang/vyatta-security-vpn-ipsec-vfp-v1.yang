@@ -23,9 +23,9 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 
 	organization "AT&T Inc.";
 	contact
-		"AT&T
+		"AT&T Inc.
 		 Postal: 208 S. Akard Street
-		         Dallas, TX 25202
+		         Dallas, TX 75202
 		 Web: www.att.com";
 
 	description
@@ -62,6 +62,10 @@ module vyatta-security-vpn-ipsec-vfp-v1 {
 		 SPDX-License-Identifier: BSD-3-Clause
 
 		 The YANG module for vyatta-security-vpn-ipsec-vfp-v1";
+
+	revision 2020-06-25 {
+		description "Correct contact details";
+	}
 
 	revision 2019-07-16 {
 		description "Added ipsec-ra-server-vfp feature to augment uses vfp to remote-access-server tunnel.";

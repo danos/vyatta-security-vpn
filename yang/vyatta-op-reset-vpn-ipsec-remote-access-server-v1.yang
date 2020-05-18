@@ -11,9 +11,9 @@ module vyatta-op-reset-vpn-ipsec-remote-access-server-v1 {
 
 	organization "AT&T Inc.";
 	contact
-		"AT&T
+		"AT&T Inc.
 		 Postal: 208 S. Akard Street
-		         Dallas, TX 25202
+		         Dallas, TX 75202
 		 Web: www.att.com";
 
 	description
@@ -50,6 +50,10 @@ module vyatta-op-reset-vpn-ipsec-remote-access-server-v1 {
 		 SPDX-License-Identifier: BSD-3-Clause
 
 		 Defines the operational CLI for the reset for IPsec RA VPN server connections.";
+
+	revision 2020-06-25 {
+		description "Correct contact details";
+	}
 
 	revision 2019-01-23 {
 		description "Initial version";

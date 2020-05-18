@@ -19,7 +19,7 @@ module vyatta-security-vpn-ipsec-path-monitor-v1 {
 	contact
 		"AT&T Inc.
 		 Postal: 280 S. Akard Street
-				 Dallas, TX 25202
+				 Dallas, TX 75202
 		 Web: www.att.com";
 
 	description
@@ -56,6 +56,10 @@ module vyatta-security-vpn-ipsec-path-monitor-v1 {
 		 SPDX-License-Identifier: BSD-3-Clause
 
 		 The YANG module for vyatta-security-vpn-ipsec-path-monitor-v1";
+
+	revision 2020-06-25 {
+		description "Correct contact details";
+	}
 
 	revision 2018-06-10 {
 		description "Initial revision.";
