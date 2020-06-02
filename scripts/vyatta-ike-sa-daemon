@@ -13,6 +13,7 @@ import pprint
 import random
 import re
 import sched
+import sdnotify
 import threading
 from threading import Event, Thread, RLock, Condition
 import time
@@ -889,6 +890,10 @@ class DBusIPsecService(dbus.service.Object):
     @dbus.service.method(DBUS_INTERFACE, in_signature='', out_signature='')
     def reload(self):
         dbg(LOG.EVENT, '[D-Bus] reload')
+        # notify systemd of transition out of ready state
+        # This will allow other processes to watch the state of this
+        # process before issuing more requests
+        sdconn.notify("RELOADING=1")
         self.daemon.schedule(ReloadConfigJob(self.daemon), prio=JOB_PRIO_RELOAD)
 
     #
@@ -1325,6 +1330,8 @@ class ReloadConfigJob(Job):
     def run(self, vs):
         del vs # unused
         self.daemon.read_config()
+        # notify systemd of readiness to accept more commands
+        sdconn.notify("READY=1")
 
 class JobLockedError(Exception):
     def __init__(self, item):
@@ -1437,6 +1444,9 @@ class Daemon:
         # VICI listener thread
         listener_thread = Thread(name='Listener', target=self._listen_func)
         listener_thread.start()
+
+        # notify systemd - initialized
+        sdconn.notify("READY=1")
 
         try:
             # Mainloop for D-Bus interface
@@ -2381,6 +2391,7 @@ class Daemon:
 if __name__ == '__main__':
 
     syslog.openlog(DAEMON_NAME, facility=syslog.LOG_DAEMON)
+    sdconn = sdnotify.SystemdNotifier()
 
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     dbus.mainloop.glib.threads_init()

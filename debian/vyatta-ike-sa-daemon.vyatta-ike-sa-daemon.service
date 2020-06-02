@@ -5,6 +5,7 @@ After=strongswan.service
 ConditionPathExists=/var/run/charon.vici
 
 [Service]
+Type=notify
 ExecStart=/opt/vyatta/sbin/vyatta-ike-sa-daemon
 Restart=on-failure
 
