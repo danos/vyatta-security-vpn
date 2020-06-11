@@ -146,7 +146,7 @@ if ( $updown ne '' ) {
 
     chomp($vfp_ifindex) if defined($vfp_ifindex);
     my $vrf_id;
-    if ( -f '/sys/class/net/' . $vfp_ifname . '/master/ifindex') {
+    if ( defined $vfp_ifname and -f '/sys/class/net/' . $vfp_ifname . '/master/ifindex') {
         chomp( $vrf_id =
              read_file( '/sys/class/net/' . $vfp_ifname . '/master/ifindex' ) );
     } else {
