@@ -91,7 +91,7 @@ vyatta-security-vpn (1.46) unstable; urgency=medium
 
   [ Thomas Kiely ]
   * Revert "Handle setup_vici retries"
-  * Revert "Don't start Strongswan if VFFP notify ipsec and not MASTER"
+  * Revert "Don't start Strongswan if VRRP notify ipsec and not ACTIVE"
 
   [ Daniel Gollub ]
   * Only assign interface to a SPD for non-default VRFs
@@ -124,7 +124,7 @@ vyatta-security-vpn (1.44) unstable; urgency=medium
     (Fixes: VRVDR-49344)
 
   [ Thomas Kiely ]
-  * Don't start Strongswan if VFFP notify ipsec and not MASTER
+  * Don't start Strongswan if VRRP notify ipsec and not ACTIVE
   * Handle setup_vici retries
 
   [ Mark Gillott ]

@@ -96,7 +96,7 @@ if ( $updown ne '' ) {
         exit -1;
     }
 
-# Obtain the master ifindex from the lo interface, in case the default VRF is configured.
+# Obtain the ifindex of the VRF device from the lo interface, in case the default VRF is configured.
     if ( $overlay_vrf eq 'default' or $overlay_vrf eq '' ) {
         $overlay_vrf = 'lo';
     }
