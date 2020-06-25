@@ -1,5 +1,5 @@
 #
-# This helper library is ment to be sourced by strongswan updown scripts.
+# This helper library is meant to be sourced by strongswan updown scripts.
 #
 # Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
 # Copyright (c) 2016, Brocade Communications Systems, Inc.
