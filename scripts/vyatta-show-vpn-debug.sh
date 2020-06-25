@@ -1,40 +1,56 @@
-#! /bin/sh
+#!/bin/bash
 
-# Copyright (c) 2018-2019 AT&T Intellectual Property.
+# Copyright (c) 2018-2020, AT&T Intellectual Property.
 # All rights reserved.
 #
 # Copyright (c) 2014-2017 Brocade Communications Systems, Inc.
 # All rights reserved.
 
-
+#
 # SPDX-License-Identifier: GPL-2.0-only
-
-export IPSEC_CONFS=/etc
-export IPSEC_CONFDDIR=/etc/ipsec.d
-
-#
-#Set of IPsec commands first
 #
 
-#version
+# Legacy stroke commands.
+# Will be removed very soon.
+(
 echo "IPsec version"
 ipsec --version
 
-#directory
 echo "IPsec working directory"
 ipsec --directory
 
-#statusall
 echo "IPsec status"
 ipsec statusall
 
-#listall
 echo "Info about all certificates/groups/plugins"
 ipsec listall
+)
 
-#
-#Set of system procedures for showing debug info
-#
+(
+
+echo "IKE control-plane version"
+swanctl --version
+echo
+swanctl --list-conns
+echo
+swanctl --list-sas
+echo
+swanctl --list-pols
+echo
+echo "Info about all certificates/groups/plugins"
+swanctl --stats
+echo
+swanctl --counters
+echo
+swanctl --list-authorities
+echo
+swanctl --list-certs
+echo
+swanctl --list-pools
+echo
+swanctl --list-algs
+
+) 2> /dev/null
 
 #pfkey
 if [ -r /proc/net/pfkey ];
@@ -44,13 +60,6 @@ then
         ip -s xfrm policy
 fi
 
-#ipsec proc
-if [ -d /proc/sys/net/ipsec ];
-then
-        ( cd /proc/sys/net/ipsec && grep '^' * )
-fi
-
-#routing ruleset and ip route
 echo routing rule set
 ip rule list
 echo
@@ -59,72 +68,26 @@ echo
 ip route list table all
 echo
 
-#ls -l ipsec
-if [ -f /proc/net/ipsec_version ];
-then
-        ls -l /proc/net/ipsec_*
-fi
-
-#ipsec conf
-if [ -r /usr/lib/ipsec/_keycensor ];
-then
-        /usr/lib/ipsec/_include $IPSEC_CONFS/ipsec.conf | /usr/lib/ipsec/_keycensor
-fi
-
-if [ -r /usr/lib/ipsec/_secretcensor ];
-#ipsec/secrets
-then
-        /usr/lib/ipsec/_include $IPSEC_CONFS/ipsec.secrets | /usr/lib/ipsec/_secretcensor
-fi
-
-#ipsec policies
-if [ -n ${IPSEC_CONFDDIR}/policies ];
-then
-if [ `ls ${IPSEC_CONFDDIR}/policies 2> /dev/null | wc -l` -ne 0 ];
-	then
-	for policy in ${IPSEC_CONFDDIR}/policies/*
-		do
-			echo $(basename $policy)
-			cat $policy
-		done
-	fi
-fi
-
-#ipsec_version
-if [ -r /proc/net/ipsec_version ];
-then
-        cat /proc/net/ipsec_version
-else
-        if [ -r /proc/net/pfkey ];
-        then
-                echo "NETKEY (`uname -r`) support detected"
-        else
-                echo "no KLIPS or NETKEY support detected"
-        fi
-fi
 
 #dump dataplane deatils
 if [ ! -f '/opt/vyatta/etc/features/vyatta-security-vpn-ipsec-v1/disable-dataplane-ipsec' ]; then
-	/opt/vyatta/bin/vplsh -l -c 'ipsec'
-	echo
-	# query all VRFs
-	for n in `ls -1d /sys/class/net/vrf*/`; do
-		vrf=$( basename $n )
+        /opt/vyatta/bin/vplsh -l -c 'ipsec'
+        echo
+        # query all VRFs
+        for n in `ls -1d /sys/class/net/vrf*/`; do
+                vrf=$( basename $n )
 
-		echo "# vplsh ipsec commands for VRF $vrf"
-		/opt/vyatta/bin/vplsh -l -c "ipsec spd vrf_id $(cat /sys/class/net/$vrf/ifindex)"
-		/opt/vyatta/bin/vplsh -l -c "ipsec sad vrf_id $(cat /sys/class/net/$vrf/ifindex)"
-		/opt/vyatta/bin/vplsh -l -c "ipsec spi vrf_id $(cat /sys/class/net/$vrf/ifindex)"
-		/opt/vyatta/bin/vplsh -l -c "ipsec bind vrf_id $(cat /sys/class/net/$vrf/ifindex)"
-		echo
-	done
-	# punt path is required when dataplane is used for IPsec
-	iptables-save
-	echo
+                echo "# vplsh ipsec commands for VRF $vrf"
+                /opt/vyatta/bin/vplsh -l -c "ipsec spd vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+                /opt/vyatta/bin/vplsh -l -c "ipsec sad vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+                /opt/vyatta/bin/vplsh -l -c "ipsec spi vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+                /opt/vyatta/bin/vplsh -l -c "ipsec bind vrf_id $(cat /sys/class/net/$vrf/ifindex)"
+                echo
+        done
+        # punt path is required when dataplane is used for IPsec
+        iptables-save
+        echo
 fi
-
-# dump current logging options
-cat /etc/strongswan.d/charon-logging.conf 2> /dev/null
 
 # dump vyatta-ike-sa-daemon details
 echo "# vyatta-ike-sa-daemon state:"
