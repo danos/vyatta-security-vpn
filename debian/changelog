@@ -1,3 +1,18 @@
+vyatta-security-vpn (1.57) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * IPsec RA client/server: use "%any" for local-address any configurations
+
+  [ Mike Manning ]
+  * Mark sha1_160 hash as obsolete
+
+  [ Daniel Gollub ]
+  * yang: move VTI yang modules into vyatta-security-vpn
+  * updown: silence use of uninitialized value $vfp_ifname warning
+  * Use non-offensive terminology
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 25 Jun 2020 18:39:17 +0200
+
 vyatta-security-vpn (1.56) unstable; urgency=medium
 
   * Avoid setup-race between VCI and non-VCI code
