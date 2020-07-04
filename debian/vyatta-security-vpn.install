@@ -1,10 +1,10 @@
-/etc
 /usr/lib
 /var/lib/vyatta-security-vpn
 /opt/vyatta/bin
 /opt/vyatta/etc
 /opt/vyatta/sbin
 opt/vyatta/share
+etc/logrotate.d/
 etc/systemd/system/strongswan.service.d/
 python/vyatta/vpn/ipsec/*.py usr/lib/python3/dist-packages/vyatta/vpn/ipsec
 tmpfiles.d/vyatta-ipsec.conf usr/lib/tmpfiles.d

@@ -24,7 +24,6 @@ sbin_SCRIPTS += scripts/vyatta-vti-config.pl
 sbin_SCRIPTS += scripts/vyatta-s2s-config
 sbin_SCRIPTS += scripts/vyatta-ipsec-rekey
 sbin_SCRIPTS += scripts/vyatta-security-vpn-secrets
-sbin_SCRIPTS += scripts/vyatta-ike-sa-daemon
 sbin_SCRIPTS += scripts/vpn-config-vici
 sbin_SCRIPTS += scripts/vyatta-op-vpn-ipsec-vici
 sbin_SCRIPTS += scripts/vpn-config-global-ike

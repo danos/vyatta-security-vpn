@@ -1,0 +1,2 @@
+etc/dbus-1/system.d/net.vyatta.eng.security.vpn.ipsec.conf
+scripts/vyatta-ike-sa-daemon	opt/vyatta/sbin/

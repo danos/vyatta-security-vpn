@@ -51,7 +51,6 @@ Depends:
  libcharon-extra-plugins,
  python3,
  python3-dbus,
- python3-gi,
  python3-vci,
  python3-vici (>= 5.3.0),
  python3-vplaned,
@@ -61,6 +60,7 @@ Depends:
  vyatta-op,
  vyatta-service-dhcp-client,
  vyatta-ipsec-trapd,
+ vyatta-ike-sa-daemon,
  xtables-addons-bypass,
  ${misc:Depends},
  ${perl:Depends},
@@ -169,3 +169,16 @@ Architecture: all
 Depends: ${misc:Depends}, ${yang:Depends}, vyatta-interfaces-base
 Description: vyatta-op-show-interfaces-vti-v1 module
  Operational mode integration for viewing virtual interface configuration
+
+Package: vyatta-ike-sa-daemon
+Architecture: any
+Depends:
+  python3,
+  python3-dbus,
+  python3-gi,
+  python3-vici (>= 5.8.2),
+  vyatta-security-vpn,
+  ${shlibs:Depends},
+  ${misc:Depends}
+Description: Vyatta IKE SA management daemon
+ Vyatta IKE SA management of the IKE control-plane implementation
