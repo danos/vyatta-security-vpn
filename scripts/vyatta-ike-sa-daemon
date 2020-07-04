@@ -13,7 +13,6 @@ import pprint
 import random
 import re
 import sched
-import sdnotify
 import threading
 from threading import Event, Thread, RLock, Condition
 import time
@@ -28,6 +27,7 @@ from gi.repository import GLib
 import dbus
 import dbus.service
 import dbus.mainloop.glib
+import sdnotify
 import vici
 import _thread
 
