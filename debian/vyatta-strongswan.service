@@ -1,0 +1,19 @@
+[Unit]
+Description=strongSwan IPsec IKEv1/IKEv2 daemon using charon-systemd
+After=network.target
+PartOf=vyatta-dataplane.service
+
+[Service]
+Type=notify
+#ExecStart=/usr/bin/valgrind --trace-children=no --log-file=/tmp/charon-systemd.%%p.log -- /usr/sbin/charon-systemd
+ExecStart=/usr/sbin/charon-systemd
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /run/starter.charon.pid'
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /run/charon.pid'
+ExecStopPost=rm -f /run/starter.charon.pid /run/charon.pid
+ExecStopPost=systemctl kill --signal=TERM vyatta-ike-sa-daemon.service
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
+Alias=vyatta-strongswan.service

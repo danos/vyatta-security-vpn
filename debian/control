@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
 Build-Depends:
  cpio,
+ config-package-dev,
  debhelper (>= 9),
  debhelper (>= 9.20160709) | dh-systemd,
  debhelper (>= 9.20160403~) | dh-autoreconf,
@@ -35,9 +36,10 @@ Standards-Version: 3.9.6
 Package: vyatta-security-vpn
 Conflicts: vyatta-cfg-vpn, vyatta-op-vpn, vyatta-op (<< 0.21)
 Replaces: vyatta-cfg-vpn, vyatta-op-vpn, vyatta-op (<< 0.21)
-Provides: vyatta-security-vpn-ipsec-feature
+Provides: vyatta-security-vpn-ipsec-feature, ${diverted-files}
 Architecture: any
 Depends:
+ charon-systemd (>= 5.7.2),
  chvrf,
  curl,
  iproute2 (>= 3.16.0),
@@ -57,7 +59,7 @@ Depends:
  python3-vici (>= 5.3.0),
  python3-sdnotify,
  python3-vplaned,
- strongswan (>= 5.3.0),
+ strongswan-starter,
  strongswan-swanctl,
  vyatta-cfg (>= 0.117),
  vyatta-op,
