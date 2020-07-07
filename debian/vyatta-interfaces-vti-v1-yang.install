@@ -1,1 +1,2 @@
-usr/share/configd/yang/vyatta-interfaces-vti-v1.yang
+yang/vyatta-interfaces-vti-v1.yang	usr/share/configd/yang/
+tmplscripts/interfaces	opt/vyatta/share/tmplscripts/

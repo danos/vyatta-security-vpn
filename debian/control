@@ -85,6 +85,7 @@ Description: Vyatta VPN configuration templates and scripts.
 Package: vyatta-security-vpn-ipsec-v1-yang
 Architecture: all
 Depends:
+ vyatta-cfg (>= 0.117),
  vyatta-security-vpn-ipsec-feature,
  ${misc:Depends},
  ${yang:Depends}
@@ -164,7 +165,11 @@ Description: vyatta-op-clear-vpn-x509-v1 module
 
 Package: vyatta-interfaces-vti-v1-yang
 Architecture: all
-Depends: vyatta-interfaces, ${misc:Depends}, ${yang:Depends}
+Depends:
+ vyatta-cfg (>= 0.117),
+ vyatta-interfaces,
+ ${misc:Depends},
+ ${yang:Depends}
 Breaks: vyatta-cfg-system (<< 1.6.0)
 Replaces: vyatta-cfg-system (<< 1.6.0)
 Description: vyatta-interfaces-vti-v1 module

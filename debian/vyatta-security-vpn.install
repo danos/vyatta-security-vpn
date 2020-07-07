@@ -8,3 +8,5 @@ etc/logrotate.d/
 etc/systemd/system/strongswan.service.d/
 python/vyatta/vpn/ipsec/*.py usr/lib/python3/dist-packages/vyatta/vpn/ipsec
 tmpfiles.d/vyatta-ipsec.conf usr/lib/tmpfiles.d
+tmplscripts/security/vpn/configd_end.sh	opt/vyatta/share/tmplscripts/security/vpn/
+tmplscripts/security/vpn/ipsec/site-to-site/configd_begin.pl	opt/vyatta/share/tmplscripts/security/vpn/ipsec/site-to-site/

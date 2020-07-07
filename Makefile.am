@@ -9,8 +9,6 @@ etcudevdir	 = /etc/udev
 initddir	 = /etc/init.d
 logrotatedir     = /etc/logrotate.d
 strongswandir    = /etc/strongswan.d
-tmplscriptdir = $(datadir)/tmplscripts
-yangdir = /usr/share/configd/yang
 dhcphookdir = /etc/dhcp/dhclient-exit-hooks.d
 techsprtdir = $(datadir)/vyatta-op/functions/tech-support.d
 
@@ -63,10 +61,6 @@ install-exec-hook:
 		scripts/vyatta-dataplane-s2s-updown \
 		scripts/vyatta-updown-helper.sh \
 		scripts/vyatta-ext-fetcher
-	mkdir -p $(DESTDIR)$(tmplscriptdir)
-	cd tmplscripts && $(cpiop) $(DESTDIR)$(tmplscriptdir)
-	mkdir -p $(DESTDIR)$(yangdir)
-	cd yang && $(cpiop) $(DESTDIR)$(yangdir)
 	mkdir -p $(DESTDIR)$(sysconfdir)
 	cp scripts/key-pair.template $(DESTDIR)$(sysconfdir)
 	mkdir -p $(DESTDIR)$(opdir)
