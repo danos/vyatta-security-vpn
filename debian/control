@@ -63,6 +63,7 @@ Depends:
  strongswan-swanctl,
  vyatta-cfg (>= 0.117),
  vyatta-op,
+ vyatta-op-ipsec-danos-v1-yang (>= ${source:Version}),
  vyatta-service-dhcp-client,
  vyatta-ipsec-trapd,
  vyatta-ike-sa-daemon,
@@ -193,3 +194,13 @@ Depends:
   ${misc:Depends}
 Description: Vyatta IKE SA management daemon
  Vyatta IKE SA management of the IKE control-plane implementation
+
+Package: vyatta-op-ipsec-danos-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn,
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-op-ipsec-danos-v1 module
+ The YANG module for vyatta-op-ipsec-danos-v1, holding
+ DANOS specific glue-code implementation hooks.

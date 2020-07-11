@@ -1,6 +1,6 @@
-module vyatta-op-clear-vpn-x509-v1 {
-	namespace "urn:vyatta.com:mgmt:vyatta-op-clear-vpn-x509:1";
-	prefix vyatta-op-clear-vpn-x509-v1;
+module vyatta-op-ipsec-danos-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-op-ipsec-danos:1";
+	prefix vyatta-op-ipsec-danos-v1;
 
 	import vyatta-opd-extensions-v1 {
 		prefix opd;
@@ -8,16 +8,19 @@ module vyatta-op-clear-vpn-x509-v1 {
 	import vyatta-op-clear-v1 {
 		prefix clear;
 	}
+	import vyatta-op-clear-vpn-x509-v1 {
+		prefix vpn;
+	}
 
 	organization "AT&T Inc.";
 	contact
 		"AT&T Inc.
-		 Postal: 208 S. Akard Street
-			 Dallas, TX 75202
+		 Postal: 280 S. Akard Street
+		 Dallas, TX 75202
 		 Web: www.att.com";
 
 	description
-		"Copyright (c) 2019, AT&T Intellectual Property.
+		"Copyright (c) 2020 AT&T Intellectual Property.
 		 All rights reserved.
 
 		 Redistribution and use in source and binary forms, with or
@@ -49,23 +52,16 @@ module vyatta-op-clear-vpn-x509-v1 {
 
 		 SPDX-License-Identifier: BSD-3-Clause
 
-		 Defines the operational CLI for security vpn clear operations.";
+		 The YANG module for vyatta-op-ipsec-danos-v1";
 
-	revision 2020-06-25 {
-		description "Correct contact details";
+	revision 2020-07-08 {
+		description "Initial revision.";
 	}
 
-	revision 2019-01-23 {
-		description "Initial version";
-	}
-
-	opd:augment /clear:clear {
-		opd:command vpn {
+	opd:augment /clear:clear/vpn:vpn/vpn:x509 {
+		opd:command status {
 			opd:help "Clear VPN certificate status cache";
-
-			opd:command x509 {
-				opd:help "Clear VPN certificate status cache";
-			}
+			opd:on-enter 'vyatta-op-vpn-ipsec-vici --flush-certs';
 		}
 	}
 }
