@@ -1,0 +1,153 @@
+module vyatta-op-monitor-interfaces-vti-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-op-monitor-interfaces-vti:1";
+	prefix vyatta-op-monitor-interfaces-vti-v1;
+
+	import vyatta-opd-extensions-v1 {
+		prefix opd;
+	}
+	import vyatta-op-monitor-v1 {
+		prefix monitor;
+	}
+	import vyatta-op-monitor-interfaces-v1 {
+		prefix interfaces;
+	}
+
+	organization "AT&T Inc.";
+	contact
+		"AT&T Inc.
+		 Postal: 208 S. Akard Street
+			 Dallas, TX 75202
+		 Web: www.att.com";
+
+	description
+		"Copyright (c) 2020, AT&T Intellectual Property.
+		 All rights reserved.
+
+		 Redistribution and use in source and binary forms, with or
+		 without modification, are permitted provided that the following
+		 conditions are met:
+
+		 1. Redistributions of source code must retain the above copyright
+			notice, this list of conditions and the following disclaimer.
+		 2. Redistributions in binary form must reproduce the above
+			copyright notice, this list of conditions and the following
+			disclaimer in the documentation and/or other materials provided
+			with the distribution.
+		 3. Neither the name of the copyright holder nor the names of its
+			contributors may be used to endorse or promote products derived
+			from this software without specific prior written permission.
+
+		 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+		 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+		 LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+		 FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+		 COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+		 INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+		 BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+		 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+		 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+		 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+		 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+		 POSSIBILITY OF SUCH DAMAGE.
+
+		 SPDX-License-Identifier: BSD-3-Clause
+
+		 Defines the operational CLI for VTI interfaces monitor operations.";
+
+	revision 2020-07-21 {
+		description "Initial version";
+	}
+
+	opd:augment /monitor:monitor/interfaces:interfaces {
+		opd:command vti {
+			opd:help "Monitor a vti interface";
+			opd:on-enter "bmon -U -b -r 10 -p vti*";
+
+			opd:argument if-name {
+				opd:help "Monitor specified vti interface";
+				opd:on-enter "bmon -U -b -r 10 -p $4";
+				opd:allowed 'vyatta-interfaces.pl --show vti';
+				type string {
+					pattern 'vti[0-9]+';
+					opd:pattern-help "<vtiN>";
+				}
+
+				opd:command traffic {
+					opd:help "Monitor captured traffic on specified vti interface";
+					opd:on-enter "vyatta-tshark.pl --intf $4";
+
+					opd:command detail {
+						opd:help "Monitor detailed traffic for the specified vti interface";
+						opd:on-enter "vyatta-tshark.pl --intf $4 --detail";
+						opd:command filter {
+							opd:help "Monitor detailed filtered traffic for the specified vti interface";
+							opd:argument filter-arg {
+								opd:help "Monitor detailed filtered traffic for the specified vti interface";
+								opd:on-enter "vyatta-tshark.pl --intf $4 --detail --filter ${@:8}";
+								type string {
+									opd:pattern-help "<display-filter>";
+								}
+							}
+						}
+
+						opd:command unlimited {
+							opd:help "Monitor detailed traffic for the specified vti interface";
+							opd:on-enter "vyatta-tshark.pl --intf $4 --detail --unlimited";
+
+							opd:argument filter-arg {
+								opd:help "Monitor detailed filtered traffic for the specified vti interface";
+								opd:on-enter "vyatta-tshark.pl --intf $4 --detail --unlimited --filter ${@:8}";
+								type string {
+									opd:pattern-help "<display-filter>";
+								}
+							}
+						}
+					}
+
+					opd:command filter {
+						opd:help "Monitor filtered traffic for the specified vti interface";
+						opd:argument filter-arg {
+							opd:help "Monitor detailed filtered traffic for the specified vti interface";
+							opd:on-enter "vyatta-tshark.pl --intf $4 --filter ${@:7}";
+							type string {
+								opd:pattern-help "<display-filter>";
+							}
+						}
+					}
+
+					opd:command save {
+						opd:help "Save monitored traffic to the specified file";
+						opd:argument filter-arg {
+							opd:help "Save monitored traffic to the specified file";
+							opd:on-enter "vyatta-tshark.pl --intf $4 --save ${@:7}";
+							type string {
+								opd:pattern-help "<name>.pcap";
+							}
+							opd:command size {
+								opd:help "Save monitored traffic to a file with max size";
+								opd:argument size-arg {
+									opd:help "Maximum file size (e.g., 1 = 1 KiB, 1M = 1 MiB)";
+									opd:on-enter "vyatta-tshark.pl --intf $4 --save ${@:7} --size ${@:9}";
+									type string {
+										opd:pattern-help "<number>";
+									}
+
+									opd:command files {
+										opd:help "Save monitored traffic to set of rotated files";
+										opd:argument size-arg {
+											opd:help "Number of files to rotate stored traffic through";
+											opd:on-enter "vyatta-tshark.pl --intf $4 --save ${@:7} --size ${@:9} --files ${@:11}";
+											type uint32 {
+												range 1..99999;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

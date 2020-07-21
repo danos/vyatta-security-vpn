@@ -213,3 +213,12 @@ Depends:
  ${yang:Depends}
 Description: vyatta-op-clear-interfaces-vti-v1 module
  Operational mode integration for clearing virtual tunnel interface counters
+
+Package: vyatta-op-monitor-interfaces-vti-v1-yang
+Architecture: all
+Depends:
+ vyatta-security-vpn-ipsec-feature,
+ ${misc:Depends},
+ ${yang:Depends}
+Description: vyatta-op-monitor-interfaces-vti-v1 module
+ Operational mode integration for monitoring virtual tunnel interfaces
