@@ -1,3 +1,26 @@
+vyatta-security-vpn (2.1) unstable; urgency=medium
+
+  [ Daniel Gollub ]
+  * debian: split vyatta-ike-sa-daemon into a seperate package
+  * debian: clean-up dependency handling between glue-code and data-model
+  * updown: codespell fix
+  * vyatta-ike-sa-daemon: don't depend on charon.pid file
+  * vyatta-ike-sa-daemon: conditional read of generated configuration
+  * vyatta-ike-sa-daemon: codepsell fixes
+
+  [ Srinivas Narayan ]
+  * Add support for signaling ike-sa-daemon state to systemd
+
+  [ Daniel Gollub ]
+  * ike-sa-daemon: fix order of import
+  * ipsec-debug: migrate over to swanctl
+  * yang: align contact details
+  * debian: switch to charon-systemd
+  * debian: use dh_install for yang files
+  * yang: split "clear vpn x509 status" into seperate module
+
+ -- Daniel Gollub <dgollub@att.com>  Tue, 28 Jul 2020 10:12:39 +0200
+
 vyatta-security-vpn (2.0) unstable; urgency=medium
 
   * ike-sa-daemon: handle strongswan 5.8.2 child-updown behavior change
