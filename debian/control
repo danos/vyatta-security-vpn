@@ -155,17 +155,3 @@ Depends:
  ${yang:Depends}
 Description: vyatta-op-clear-vpn-x509-v1 module
  The YANG module for vyatta-op-clear-vpn-x509-v1
-
-Package: vyatta-interfaces-vti-v1-yang
-Architecture: all
-Depends: vyatta-interfaces, ${misc:Depends}, ${yang:Depends}
-Breaks: vyatta-cfg-system (<< 1.6.0)
-Replaces: vyatta-cfg-system (<< 1.6.0)
-Description: vyatta-interfaces-vti-v1 module
- VTI interface configuration
-
-Package: vyatta-op-show-interfaces-vti-v1-yang
-Architecture: all
-Depends: ${misc:Depends}, ${yang:Depends}, vyatta-interfaces-base
-Description: vyatta-op-show-interfaces-vti-v1 module
- Operational mode integration for viewing virtual interface configuration
