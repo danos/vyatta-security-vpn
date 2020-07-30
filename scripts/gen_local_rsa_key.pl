@@ -3,7 +3,7 @@
 #
 # Copyright:
 #
-#   Copyright (c) 2017-2019, AT&T Intellectual Property.  All rights reserved.
+#   Copyright (c) 2017-2020, AT&T Intellectual Property.  All rights reserved.
 #   Copyright (c) 2007-2016 by Brocade Communications Systems, Inc.
 #   All Rights Reserved.
 #
@@ -20,7 +20,7 @@ use warnings;
 use lib "/opt/vyatta/share/perl5";
 use Vyatta::VPN::Util qw(rsa_get_local_pubkey rsa_public_digest
                          vpn_debug);
-use Vyatta::VPN::Config qw(rsa_get_local_key_file);
+use Vyatta::VPN::Config qw(rsa_get_local_key_file validate_local_key_file);
 use Vyatta::Config qw(get_short_config_path);
 use File::Basename;
 use File::Path;
@@ -67,23 +67,24 @@ if ($bits % bits_multiple != 0) {
     die "bits must be a multiple of " . bits_multiple . "\n";
 }
 
-my $old_umask = umask(0027);
+my $old_umask = umask(0007);
 
 my $local_key_file = rsa_get_local_key_file();
+validate_local_key_file($local_key_file);
+
+my $short_key_file = get_short_config_path($local_key_file);
+my $allowed_path   = "/config/";
+# Recommend use of /config/auth, but allow /config for backwards compatibility
+die "RSA key not generated, please specify key file to be in /config/auth\n"
+  unless $short_key_file =~ /^$allowed_path/;
 
 my ($cmd, $rc);
 
-if (-r $local_key_file) {
-    $| =1;   # force a flush
-    print "A local RSA key file already exists and will be overwritten\n";
-    print "<CTRL>C to exit:  ";
-    my $loop = 9;
-    while ($loop) {
-	print "\b$loop";
-	sleep 1;
-	$loop--;
-    }
-    print "\n";
+if ( -l $local_key_file ) {
+    die "RSA key not generated, symbolic links not allowed\n";
+} elsif ( -e $local_key_file ) {
+    die
+"RSA key not generated, delete '$short_key_file' if appropriate and retry\n";
 } else {
     my $err = undef;
     my ($dirpath) = dirname($local_key_file);
@@ -102,9 +103,7 @@ $cmd .= " --F4" if ($f4);
 
 $cmd .= " --bits $bits $local_key_file";
 
-# when presenting to users, show shortened /config path
-my $shortened_cfg_path_file = get_short_config_path($local_key_file);
-print "Generating rsa-key to $shortened_cfg_path_file\n";
+print "Generating rsa-key to $short_key_file\n";
 
 vpn_debug $cmd;
 $rc = system($cmd);

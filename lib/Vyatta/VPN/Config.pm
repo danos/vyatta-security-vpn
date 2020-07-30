@@ -85,19 +85,23 @@ sub validate_local_key_file {
 
     if ( $local_key_file ne $LOCAL_KEY_FILE_DEFAULT ) {
         if ( $local_key_file !~ /^\// ) {
-            croak "Invalid local RSA key file path \"$local_key_file\"."
+            die "Invalid local RSA key file path \"$local_key_file\"."
               . "  Does not start with a '/'.\n";
         }
         if ( $local_key_file =~ /[^a-zA-Z0-9\.\-\_\/]/g ) {
-            croak "Invalid local RSA key file path \"$local_key_file\"."
+            die "Invalid local RSA key file path \"$local_key_file\"."
               . " Contains a character that is not alpha-numeric and not '.', '-', '_', '/'.\n";
         }
         if ( $local_key_file =~ /\/\//g ) {
-            croak "Invalid local RSA key file path \"$local_key_file\"."
+            die "Invalid local RSA key file path \"$local_key_file\"."
               . " Contains string \"//\".\n";
         }
+        if ( $local_key_file =~ /\.\.\//g ) {
+            die "Invalid local RSA key file path \"$local_key_file\"."
+              . " Path traversal is not allowed.\n";
+        }
         if ( -d $local_key_file ) {
-            croak "Invalid local RSA key file path \"$local_key_file\"."
+            die "Invalid local RSA key file path \"$local_key_file\"."
               . " Path is a directory rather than a file.\n";
         }
     }
