@@ -23,7 +23,7 @@ module vyatta-security-vpn-ipsec-v1 {
 		 Web: www.att.com";
 
 	description
-		"Copyright (c) 2017-2020 AT&T Intellectual Property.
+		"Copyright (c) 2017-2019 AT&T Intellectual Property.
 		 All rights reserved.
 
 		 Redistribution and use in source and binary forms, with or
@@ -57,9 +57,6 @@ module vyatta-security-vpn-ipsec-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
-	revision 2020-05-27 {
-		description "Obsolete hash sha1_160";
-	}
 	revision 2020-04-07 {
 		description "Call site-to-site stale-tunnel teardown hook only once";
 	}
@@ -170,7 +167,6 @@ module vyatta-security-vpn-ipsec-v1 {
 					configd:help "SHA1 HMAC (default)";
 				}
 				enum "sha1_160" {
-					status obsolete;
 					configd:help "SHA1_160 hash";
 				}
 				enum "sha2_256" {
