@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.59) unstable; urgency=medium
+
+  * Revert "Mark sha1_160 hash as obsolete"
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 30 Jul 2020 20:08:04 +0200
+
 vyatta-security-vpn (1.58) unstable; urgency=medium
 
   * Revert "yang: move VTI yang modules into vyatta-security-vpn"
