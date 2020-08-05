@@ -1,3 +1,11 @@
+vyatta-security-vpn (2.2) unstable; urgency=medium
+
+  * generate vpn x509 key-pair: do not overwrite files
+  * generate vpn rsa-key: improve file path checks
+  * vpn rsa-keys local-key: do not enforce that RSA private key file exists
+
+ -- Mike Manning <mmanning@vyatta.att-mail.com>  Wed, 05 Aug 2020 10:50:38 +0100
+
 vyatta-security-vpn (2.1) unstable; urgency=medium
 
   [ Daniel Gollub ]
