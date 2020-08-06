@@ -1,3 +1,10 @@
+vyatta-security-vpn (2.3) unstable; urgency=medium
+
+  * yang: migrate VTI clear operational commands from node.def to Yang
+  * yang: migrate VTI monitor operational commands from node.def to Yang
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 06 Aug 2020 10:34:23 +0200
+
 vyatta-security-vpn (2.2) unstable; urgency=medium
 
   * generate vpn x509 key-pair: do not overwrite files
