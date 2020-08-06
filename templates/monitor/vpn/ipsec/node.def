@@ -1,2 +1,0 @@
-help: Monitor IPsec VPN
-run:  ${vyatta_bindir}/vyatta-monitor "VPN-IPSEC" charon xl2tpd pppd

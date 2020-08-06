@@ -1,3 +1,0 @@
-help: Monitor VPN
-run:  ${vyatta_bindir}/vyatta-monitor 'VPN-ALL' charon xl2tpd pppd
-
