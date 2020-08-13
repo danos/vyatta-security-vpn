@@ -8,6 +8,7 @@
 from collections import OrderedDict
 import heapq
 import json
+import os
 import os.path
 import pprint
 import random
@@ -18,10 +19,13 @@ from threading import Event, Thread, RLock, Condition
 import time
 import traceback
 
+import platform
+
 from enum import IntEnum, unique
 from itertools import count
 from queue import PriorityQueue, Empty
 import syslog
+import configparser
 from gi.repository import GLib
 
 import dbus
@@ -29,7 +33,16 @@ import dbus.service
 import dbus.mainloop.glib
 import sdnotify
 import vici
+
+import pyinotify
+from pysnmp.error import PySnmpError
+from pysnmp.hlapi import SnmpEngine, CommunityData, \
+                         Udp6TransportTarget, UdpTransportTarget, \
+                         ContextData, NotificationType, sendNotification, \
+                         ObjectIdentifier, ObjectIdentity, OctetString
+
 import _thread
+
 
 PP = None
 
@@ -143,6 +156,207 @@ def ppformat(val):
 
 def ipsec_running():
     return os.system("systemctl -q is-active strongswan") == 0
+
+def _dec(string):
+    if not string:
+        return None
+    return string.decode('utf-8')
+
+#
+# IPsec SNMP trap generation
+#
+
+SNMP_DEFAULT_PORT = '162'
+SNMP_TRAP_CONFIG_PATH = '/etc/snmp/trapd.ini'
+
+SNMPV2_MIB_SYSUPTIME = '1.3.6.1.2.1.1.3.0'
+SNMPV2_MIB_SYSNAME = '1.3.6.1.2.1.1.5.0'
+SNMPV2_MIB_SYSDESCR = '1.3.6.1.2.1.1.1.0'
+
+DIRECTION_INBOUND = 1
+DIRECTION_OUTBOUND = 2
+
+MODE_TUNNEL = 1
+MODE_TRANSPORT = 2
+
+PROTOCOL_ESP = 2
+
+STATE_DOWN = 1
+STATE_UP = 2
+
+def reload_snmp_cfg(config):
+    config.read(SNMP_TRAP_CONFIG_PATH)
+
+class SNMPCfgHandler(pyinotify.ProcessEvent):
+    def __init__(self, daemon):
+        self.daemon = daemon
+        super().__init__()
+
+    def process_default(self, event):
+        if event.pathname != SNMP_TRAP_CONFIG_PATH:
+            return
+
+        reload_snmp_cfg(self.daemon.snmp_trap_config)
+
+class HostnameHandler(pyinotify.ProcessEvent):
+    def __init__(self, daemon):
+        self.daemon = daemon
+        super().__init__()
+
+    def process_default(self, event):
+        # don't use platform.node, inotify kicks
+        # in before the platform node name got updated.
+        with open('/etc/hostname') as f:
+            self.daemon.hostname = f.readline().rstrip('\n')
+
+def uptimeTicks():
+    ticksHz = 100
+    with open('/proc/uptime') as f:
+        seconds = float(f.readline().split()[0])
+        return seconds * ticksHz
+
+def notifier_cb(source, condition, userdata):
+    notifier = userdata
+    notifier.process_events()
+    while notifier.check_events():
+        notifier.read_events()
+        notifier.process_events()
+
+def send_child_sa_trap(up, ike_sa, child_sa, config, hostname):
+
+    sys_descr = None
+
+    # Check if SNMP is enabled/configured
+    try:
+        general_cfg = config['general']
+    except KeyError:
+        return
+
+    if general_cfg:
+        sys_descr = general_cfg.get('description', None)
+        default_community = general_cfg.get('community', '')
+        trap_source = general_cfg.get('trap-source', None)
+
+
+    if sys_descr is None:
+        err(LOG.EVENT, 'Need SNMP system description set')
+        return
+
+    sections = config.sections()
+    if sections is None:
+        return
+
+    for n in sections:
+
+        if not n.startswith('trap-target'):
+            continue
+
+        addr = config[n].get('address')
+        if not addr:
+            err(LOG.EVENT, 'No address for {}'.format(n))
+            return
+
+        port = int(config[n].get('port', SNMP_DEFAULT_PORT))
+        community = config[n].get('community', None)
+
+        if community is None:
+            # If there are multiple global communities, then one needs to be
+            # expliclty bound to the trap-target(s).
+            if ' ' in default_community:
+                err(LOG.EVENT, 'Need community set for trap-target {}'.format(addr))
+                return
+
+            community = default_community
+
+        # inbound
+        send_child_sa_trap_dir(up, addr, port, trap_source, hostname, sys_descr,
+                               community, ike_sa, child_sa,
+                               DIRECTION_INBOUND, child_sa['spi-in'])
+
+        # outbound
+        send_child_sa_trap_dir(up, addr, port, trap_source, hostname, sys_descr,
+                               community, ike_sa, child_sa,
+                               DIRECTION_OUTBOUND, child_sa['spi-out'])
+
+def send_child_sa_trap_dir(up, addr, port, trap_source, hostname, sys_descr, community_name,
+                           ike_sa, child_sa, direction, spi):
+
+    if child_sa['protocol'] != b'ESP':
+        # Unsupported IPsec protocol
+        return
+    else:
+        protocol = PROTOCOL_ESP
+
+    if child_sa['mode'] == b'TUNNEL':
+        mode = MODE_TUNNEL
+    elif child_sa['mode'] == b'TRANSPORT':
+        mode = MODE_TRANSPORT
+    else:
+        # Unsupported IPsec mode
+        return
+
+    if up:
+        state = STATE_UP
+    else:
+        state = STATE_DOWN
+
+    if direction == DIRECTION_OUTBOUND:
+        local_addr = _dec(ike_sa['local-host'])
+        remote_addr = _dec(ike_sa['remote-host'])
+    else:
+        local_addr = _dec(ike_sa['remote-host'])
+        remote_addr = _dec(ike_sa['local-host'])
+
+    # BROCADE-IPSEC-MIB does not support IPv6 IPsec SAs
+    if ':' in local_addr:
+        return
+
+
+    # SNMP via IPv6 is supported
+    if ':' in addr:
+        transportTarget = Udp6TransportTarget((addr, port))
+    else:
+        transportTarget = UdpTransportTarget((addr, port))
+
+    if trap_source:
+        transportTarget.setLocalAddress(trap_source)
+
+    try:
+        errorIndication, _, _, _ = next(
+            sendNotification(
+                SnmpEngine(),
+                CommunityData(community_name),
+                transportTarget,
+                ContextData(),
+                'trap',
+                NotificationType(
+                    ObjectIdentity('BROCADE-IPSEC-MIB', 'bipsSaStateChange'),
+                    instanceIndex=(0,),
+                    objects={
+                        ('BROCADE-IPSEC-MIB', 'bipsSaSpi'): int(_dec(spi), 16),
+                        ('BROCADE-IPSEC-MIB', 'bipsSaLocalAddr'): local_addr,
+                        ('BROCADE-IPSEC-MIB', 'bipsSaRemoteAddr'): remote_addr,
+                        ('BROCADE-IPSEC-MIB', 'bipsSaDirection'): direction,
+                        ('BROCADE-IPSEC-MIB', 'bipsSaMode'): mode,
+                        ('BROCADE-IPSEC-MIB', 'bipsSaEncap'): protocol,
+                        ('BROCADE-IPSEC-MIB', 'bipsSaState'): state,
+                        }
+                ).addVarBinds(
+                    (ObjectIdentifier(SNMPV2_MIB_SYSUPTIME), uptimeTicks(),),
+                    (ObjectIdentifier(SNMPV2_MIB_SYSDESCR), OctetString(sys_descr),),
+                    (ObjectIdentifier(SNMPV2_MIB_SYSNAME), OctetString(hostname),),
+                )
+            )
+        )
+        if errorIndication:
+            err(LOG.EVENT, 'Sending IPsec SA trap failed: {}'.format(errorIndication))
+
+    except PySnmpError as e:
+        err(LOG.EVENT, 'Sending IPsec SA trap failed.')
+        # the poll error in case of unreachable peer is printing a full
+        # python backtrace as exception string. Logs this only in debug
+        # mode, no in normal operation.
+        dbg(LOG.EVENT, 'Sending IPsec SA trap failed: {}'.format(e))
 
 #
 # Exceptions
@@ -313,10 +527,6 @@ class SA(object):
 
 
     def _execute(self, vs, up, **kwargs):
-        def _dec(string):
-            if not string:
-                return None
-            return string.decode('utf-8')
 
         sa = kwargs.get('sa')
         failure = False
@@ -1330,6 +1540,8 @@ class ReloadConfigJob(Job):
     def run(self, vs):
         del vs # unused
         self.daemon.read_config()
+        reload_snmp_cfg(self.daemon.snmp_trap_config)
+
         # notify systemd of readiness to accept more commands
         sdconn.notify("READY=1")
 
@@ -1383,6 +1595,9 @@ class Daemon:
 
         self.dbus_obj_pathmon = None
         self.system_bus = None
+
+        self.snmp_trap_config = configparser.ConfigParser()
+        self.hostname = platform.node()
 
         #
         # Threading
@@ -1444,6 +1659,26 @@ class Daemon:
         # VICI listener thread
         listener_thread = Thread(name='Listener', target=self._listen_func)
         listener_thread.start()
+
+        # Setup file watchers
+        wm = pyinotify.WatchManager()
+        wm_hostname = pyinotify.WatchManager()
+        snmp_cfg_notifier = pyinotify.Notifier(wm, SNMPCfgHandler(self))
+        hostname_cfg_notifier = pyinotify.Notifier(wm_hostname, HostnameHandler(self))
+
+        # pylint: disable=no-member
+        mask = pyinotify.IN_CREATE | \
+                pyinotify.IN_DELETE | \
+                pyinotify.IN_MODIFY | \
+                pyinotify.IN_MOVED_FROM \
+                | pyinotify.IN_MOVED_TO
+
+        wm.add_watch(['/etc/snmp'], mask, rec=True)
+        wm_hostname.add_watch(['/etc/hostname'], mask, rec=True)
+
+        # pylint: disable=protected-access
+        GLib.io_add_watch(snmp_cfg_notifier._fd, GLib.IO_IN, notifier_cb, snmp_cfg_notifier)
+        GLib.io_add_watch(hostname_cfg_notifier._fd, GLib.IO_IN, notifier_cb, hostname_cfg_notifier)
 
         # notify systemd - initialized
         sdconn.notify("READY=1")
@@ -2167,7 +2402,10 @@ class Daemon:
 
             elif event == b'child-updown':
                 child_sas = values.get('child-sas')
-                for child_conn_id, _ in child_sas.items():
+                for child_conn_id, child_sa in child_sas.items():
+
+                    ike_sa = values
+                    send_child_sa_trap(True, ike_sa, child_sa, self.snmp_trap_config, self.hostname)
 
                     # strongswan 5.8.2 sends unique child SAs unames.
                     # strip the unique id away, since it breaks child config lookup.
@@ -2222,7 +2460,11 @@ class Daemon:
 
             elif event == b'child-updown':
                 child_sas = values.get('child-sas')
-                for child_conn_id, _ in child_sas.items():
+                for child_conn_id, child_sa in child_sas.items():
+
+                    ike_sa = values
+                    send_child_sa_trap(False, ike_sa, child_sa, self.snmp_trap_config,
+                                       self.hostname)
 
                     # strongswan 5.8.2 sends unique child SAs unames.
                     # strip the unique id away, since it breaks child config lookup.
