@@ -184,6 +184,8 @@ Description: vyatta-op-show-interfaces-vti-v1 module
 
 Package: vyatta-ike-sa-daemon
 Architecture: any
+Conflicts: vyatta-ipsec-trapd (<< 0.0.16)
+Replaces: vyatta-ipsec-trapd (<< 0.0.16)
 Depends:
   python3,
   python3-dbus,

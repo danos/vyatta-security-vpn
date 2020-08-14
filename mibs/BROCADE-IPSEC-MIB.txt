@@ -1,0 +1,234 @@
+-- *********************************************************************
+-- BROCADE-IPSEC-MIB.mib: Brocade IPSec Management MIB
+-- 
+-- Copyright (c) 2018-2019 by AT&T Intellectual Property.
+-- Copyright (c) 2015-2017 by Brocade Communications Systems, Inc.
+-- All rights reserved.
+--
+-- Redistribution and use in source and binary forms, with or without
+-- modification, are permitted provided that the following conditions
+-- are met:
+--
+-- 1. Redistributions of source code must retain the above copyright
+-- notice, this list of conditions and the following disclaimer.
+-- 2. Redistributions in binary form must reproduce the above
+-- copyright notice, this list of conditions and the following
+-- disclaimer in the documentation and/or other materials provided
+-- with the distribution.
+-- 3. Neither the name of the copyright holder nor the names of its
+-- contributors may be used to endorse or promote products derived
+-- from this software without specific prior written permission.
+--
+-- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+-- 'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+-- LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+-- FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+-- COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+-- INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+-- BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-- LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+-- CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+-- LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+-- ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+-- POSSIBILITY OF SUCH DAMAGE.
+--
+-- SPDX-License-Identifier: BSD-3-Clause
+--
+-- *********************************************************************
+BROCADE-IPSEC-MIB DEFINITIONS ::= BEGIN
+IMPORTS
+    MODULE-IDENTITY, NOTIFICATION-TYPE,
+    OBJECT-TYPE, Unsigned32, IpAddress
+        FROM SNMPv2-SMI
+    MODULE-COMPLIANCE, OBJECT-GROUP, NOTIFICATION-GROUP
+        FROM SNMPv2-CONF
+    bcsiModules
+        FROM Brocade-REG-MIB;
+
+brocadeIPSecMIB MODULE-IDENTITY
+    LAST-UPDATED        "201608040000Z"
+    ORGANIZATION        "AT&T Inc."
+    CONTACT-INFO
+                        "Postal: 208 S. Akard Street
+                                 Dallas, TX 75202
+                         Web:    www.att.com
+                        "
+    DESCRIPTION
+        "This MIB module is for the management of the IPSec in the
+        Brocade managed entities.
+
+        Glossary of the terms used in this MIB:
+        --------------------------------------
+        SA  - Security Association
+        SPI - Security Parameters Index
+
+        per definitions in RFC 4301, section 4.1
+        "
+    REVISION        "201608040000Z"
+    DESCRIPTION
+        "Initial version of this MIB module."
+    ::= { bcsiModules 5 }
+
+brocadeIPSecMIBNotifs  OBJECT IDENTIFIER ::=  { brocadeIPSecMIB 0 }
+brocadeIPSecMIBObjects OBJECT IDENTIFIER ::=  { brocadeIPSecMIB 1 }
+brocadeIPSecMIBConform OBJECT IDENTIFIER ::=  { brocadeIPSecMIB 2 }
+
+bipsNotifObjects  OBJECT IDENTIFIER ::= { brocadeIPSecMIBObjects 1 }
+
+-- Objects
+
+bipsSaSpi  OBJECT-TYPE
+    SYNTAX        Unsigned32
+    MAX-ACCESS    accessible-for-notify
+    STATUS        current
+    DESCRIPTION
+        "This object represents the Security Parameters Index (SPI)
+        associated with the Security Association (SA)."
+    REFERENCE "RFC 4301, Appendix A and RFC 4303, section 2.1"
+    ::= { bipsNotifObjects 1 }
+
+bipsSaLocalAddr OBJECT-TYPE
+    SYNTAX        IpAddress
+    MAX-ACCESS    accessible-for-notify
+    STATUS        current
+    DESCRIPTION
+        "The address for the local side of the connection."
+    ::= { bipsNotifObjects 2 }
+
+bipsSaRemoteAddr OBJECT-TYPE
+    SYNTAX        IpAddress
+    MAX-ACCESS    accessible-for-notify
+    STATUS        current
+    DESCRIPTION
+        "The address of the remote side of the connection."
+    ::= { bipsNotifObjects 3 }
+
+bipsSaDirection  OBJECT-TYPE
+    SYNTAX         INTEGER {
+         inbound(1),
+         outbound(2)
+    }
+    MAX-ACCESS     accessible-for-notify
+    STATUS         current
+    DESCRIPTION
+        "This object indicates the direction of the SA, as
+        SA's are simplex (unidirectional).
+
+        'inbound' - connection is for sending
+        'outbound' - connection is for receiving
+        "
+    REFERENCE "RFC 4031, section 4.1"
+    ::= { bipsNotifObjects 4 }
+
+bipsSaMode  OBJECT-TYPE
+    SYNTAX         INTEGER {
+         tunnel(1),
+         transport(2)
+    }
+    MAX-ACCESS     accessible-for-notify
+    STATUS         current
+    DESCRIPTION
+        "This object indicates the mode of the SA.
+
+        'tunnel' - tunnel allows entire IP header encapsulation, allowing
+                   the endpoints to operate as security gateways;
+        'transport' - tunnel is point-to-point and header source and
+                      destination addresses are preserved, which means that
+                      the traffic must originate and terminate on the SA
+                      endpoints, i.e. not be transit traffic;
+        "
+	REFERENCE "RFC 4303, sections 3.1.1 and 3.2.1"
+    ::= { bipsNotifObjects 5 }
+
+bipsSaEncap  OBJECT-TYPE
+    SYNTAX         INTEGER {
+        ah(1),
+        esp(2)
+    }
+    MAX-ACCESS     accessible-for-notify
+    STATUS         current
+    DESCRIPTION
+        "This object indicates the type of encapsulation of the SA.
+
+        'ah' - Authentication Header protocol
+        'esp' - Encapsulating Security Payload protocol
+        "
+    REFERENCE "RFC 4302, section 3.1 and RFC 4303, section 3.1"
+    ::= { bipsNotifObjects 6 }
+
+bipsSaState  OBJECT-TYPE
+    SYNTAX         INTEGER {
+        down(1),
+        up(2)
+    }
+    MAX-ACCESS     accessible-for-notify
+    STATUS         current
+    DESCRIPTION
+        "This object indicates the operational state of the SA.
+
+        'down'    - association is being destroyed
+        'up'      - association is being created
+        "
+    ::= { bipsNotifObjects 7 }
+
+-- Notifications
+
+bipsSaStateChange NOTIFICATION-TYPE
+    OBJECTS     {
+        bipsSaSpi,
+        bipsSaLocalAddr,
+        bipsSaRemoteAddr,
+        bipsSaDirection,
+        bipsSaMode,
+        bipsSaEncap,
+        bipsSaState
+    }
+    STATUS         current
+    DESCRIPTION
+        "This is a Notification to indicate that operational state of
+        the SA has changed."
+    ::= { brocadeIPSecMIBNotifs 1 }
+
+--
+-- Conformance
+--
+
+brocadeIPSecMIBCompliances OBJECT IDENTIFIER
+                             ::= { brocadeIPSecMIBConform 1 }
+brocadeIPSecMIBGroups       OBJECT IDENTIFIER
+                             ::= { brocadeIPSecMIBConform 2 }
+
+brocadeIPSecMIBCompliance MODULE-COMPLIANCE
+    STATUS     current
+    DESCRIPTION
+        "The compliance statement for entities which
+        implement BROCADE-IPSEC-MIB."
+    MODULE MANDATORY-GROUPS { bipsSaNotifGroup, bipsSaNotifObjGroup }
+    ::= { brocadeIPSecMIBCompliances 1 }
+--
+-- Units of Conformance
+--
+bipsSaNotifGroup  NOTIFICATION-GROUP
+    NOTIFICATIONS  { bipsSaStateChange }
+    STATUS         current
+    DESCRIPTION
+        "A collection of notifications for IPsec SA transitions
+         "
+    ::= { brocadeIPSecMIBGroups 1 }
+
+bipsSaNotifObjGroup  OBJECT-GROUP
+    OBJECTS {
+        bipsSaSpi,
+        bipsSaLocalAddr,
+        bipsSaRemoteAddr,
+        bipsSaDirection,
+        bipsSaMode,
+        bipsSaEncap,
+        bipsSaState
+    }
+    STATUS         current
+    DESCRIPTION
+        "A collection of objects for the notifications."
+    ::= { brocadeIPSecMIBGroups 2 }
+END
+
