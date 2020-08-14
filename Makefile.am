@@ -3,6 +3,8 @@ SUBDIRS = . tests
 opdir        = $(datadir)/vyatta-op/templates
 
 share_perl5dir	 = $(datarootdir)/perl5/Vyatta/VPN
+pysnmp_mibdir    = /usr/lib/python3/dist-packages/pysnmp/smi/mibs
+snmp_mibdir      = /usr/share/snmp/mibs
 
 libudevdir	 = /lib/udev
 etcudevdir	 = /etc/udev
@@ -67,6 +69,14 @@ install-exec-hook:
 	cd templates && $(cpiop) $(DESTDIR)$(opdir)
 	mkdir -p $(DESTDIR)$(techsprtdir)
 	cp scripts/1900-vyatta-vpn-ipsec $(DESTDIR)$(techsprtdir)
+	mkdir -p $(DESTDIR)/$(pysnmp_mibdir)
+	cp $(snmp_mibdir)/SNMPv2-SMI.txt mibs/
+	cp $(snmp_mibdir)/BROCADE-REG-MIB.txt mibs/
+	mibdump --mib-borrower=/usr/share/snmp/mibs/ \
+		--destination-directory=$(DESTDIR)/$(pysnmp_mibdir) \
+	       	--mib-source=file:./mibs/ BROCADE-IPSEC-MIB
+	rm -rf $(DESTDIR)/$(pysnmp_mibdir)/__pycache__/
+	sed -i '/^#/d' $(DESTDIR)/$(pysnmp_mibdir)/*.py
 
 coverage:
 	cover -t -make 'prove -r tests;'
@@ -75,5 +85,3 @@ check:
 	perlcritic -5 .
 	pylint3 -d R,too-many-lines,invalid-name,missing-docstring \
 		scripts/vyatta-ike-sa-daemon
-	pylint3 -d R,too-many-lines,invalid-name,missing-docstring,import-error \
-		scripts/vyatta-op-vpn-ipsec-vici

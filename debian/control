@@ -19,6 +19,7 @@ Build-Depends:
  libjson-perl,
  libnfnetlink-dev,
  libreadonly-perl,
+ libsnmp-base,
  libtest-exception-perl,
  libtest-mockobject-perl,
  libperl-critic-perl,
@@ -30,7 +31,9 @@ Build-Depends:
  python3-gi,
  python3-vci,
  python3-sdnotify,
- python3-vici
+ python3-pysnmp4,
+ python3-vici,
+ vyatta-mibs-misc
 Standards-Version: 3.9.6
 
 Package: vyatta-security-vpn

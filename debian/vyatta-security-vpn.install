@@ -1,4 +1,4 @@
-/usr/lib
+usr/lib/ipsec/
 /var/lib/vyatta-security-vpn
 /opt/vyatta/bin
 /opt/vyatta/etc
