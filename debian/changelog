@@ -1,3 +1,11 @@
+vyatta-security-vpn (1.60) unstable; urgency=medium
+
+  * generate vpn x509 key-pair: do not overwrite files
+  * generate vpn rsa-key: improve file path checks
+  * vpn rsa-keys local-key: do not enforce that RSA private key file exists
+
+ -- Mike Manning <mmanning@vyatta.att-mail.com>  Wed, 19 Aug 2020 12:14:21 +0100
+
 vyatta-security-vpn (1.59) unstable; urgency=medium
 
   * Revert "Mark sha1_160 hash as obsolete"
