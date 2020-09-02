@@ -1120,7 +1120,8 @@ if ( $vcVPN->exists('ipsec') ) {
         }
         $genout         .= "\tleftauth=psk\n";
         $genout         .= "\trightauth=psk\n";
-        $genout         .= "\trightid=\"%any\"\n" if ( !defined($rightid) );
+        $genout         .= "\trightid=\"%any\"\n"
+	    if ( ($right eq '%any') && !defined($rightid) );
       } elsif ( defined($auth_mode) && $auth_mode eq 'x509') {
         $genout .= get_x509($peer);
         $genout_secrets .= get_x509_secret($peer);
