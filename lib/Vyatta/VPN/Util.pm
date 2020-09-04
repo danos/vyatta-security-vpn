@@ -316,6 +316,7 @@ sub conv_proto_port {
     if (defined($input) && $input ne '') {
 
        ($proto, $port) = $input =~ /\[([^\/]*)\/([^\/]*)\]/xm;
+       $proto = "all" if defined($proto) && $proto eq '0';
        die "protocol must be formatted as well-known string." if (defined($proto) && $proto =~ /^\d+$/xm);
        unless (defined($port)) {
            my ($value) = $input =~ /\[(.*)\]/xm;
