@@ -1,3 +1,9 @@
+vyatta-security-vpn (1.61) unstable; urgency=medium
+
+  * Handle "proto" not set ('0')
+
+ -- Thomas Kiely <tkiely@mail.eng.vyatta.net>  Tue, 08 Sep 2020 13:43:44 +0100
+
 vyatta-security-vpn (1.60) unstable; urgency=medium
 
   * generate vpn x509 key-pair: do not overwrite files
