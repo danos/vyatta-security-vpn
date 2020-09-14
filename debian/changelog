@@ -1,3 +1,13 @@
+vyatta-security-vpn (2.4) unstable; urgency=medium
+
+  [ Thomas Kiely ]
+  * Handle "proto" not set ('0')
+
+  [ Srinivas Narayan ]
+  * Only set rightid to %any under specific conditions
+
+ -- Daniel Gollub <dgollub@att.com>  Mon, 14 Sep 2020 18:27:24 +0200
+
 vyatta-security-vpn (2.3) unstable; urgency=medium
 
   * yang: migrate VTI clear operational commands from node.def to Yang
