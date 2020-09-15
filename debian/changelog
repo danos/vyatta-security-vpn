@@ -1,3 +1,10 @@
+vyatta-security-vpn (1.62) unstable; urgency=medium
+
+  [ Srinivas Narayan ]
+  * Only set rightid to %any under specific conditions
+
+ -- Daniel Gollub <dgollub@att.com>  Tue, 15 Sep 2020 11:20:55 +0200
+
 vyatta-security-vpn (1.61) unstable; urgency=medium
 
   * Handle "proto" not set ('0')
