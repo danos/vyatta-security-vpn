@@ -541,7 +541,7 @@ class Conn(IKEConfig):
     def initiate(self, vs, **kwargs):
 
         def _first_item(ike_cfgs):
-            return next(iter(ike_cfgs.items()))[1][0]
+            return next(iter(ike_cfgs.items()))[1]
 
         with self.lock:
             ike_cfg = _first_item(self.ike_cfgs)
@@ -632,7 +632,7 @@ class IPsecRAVPNClient(Conn):
         def _first_item(ike_cfgs):
             if isinstance(ike_cfgs, list):
                 return ike_cfgs[0]
-            return next(iter(ike_cfgs.items()))[1][0]
+            return next(iter(ike_cfgs.items()))[1]
 
         def _random_item(ike_cfgs):
             if isinstance(ike_cfgs, list):
