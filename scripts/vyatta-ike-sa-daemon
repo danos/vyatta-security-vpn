@@ -634,7 +634,7 @@ class IPsecRAVPNClient(Conn):
         def _first_item(ike_cfgs):
             if isinstance(ike_cfgs, list):
                 return ike_cfgs[0]
-            return next(iter(ike_cfgs.items()))[1]
+            return next(iter(ike_cfgs.items()))[1][0]
 
         def _random_item(ike_cfgs):
             if isinstance(ike_cfgs, list):
