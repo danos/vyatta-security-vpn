@@ -1710,7 +1710,12 @@ class Daemon:
 
                             # path-monitor
                             policy_operator = MonitorPolicyOperator.OR
-                            path_mon = intf.get('path-monitor')
+
+                            path = 'vyatta-security-vpn-ipsec-path-monitor-v1:path-monitor'
+                            path_mon = intf.get(path)
+                            if path_mon is None:
+                                path_mon = intf.get('path-monitor')
+
                             monitors = []
                             if path_mon:
 
