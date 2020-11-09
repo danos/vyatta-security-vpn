@@ -1241,7 +1241,7 @@ class PathMonStateChangeJob(Job):
                     .format(conn.get_state(), ike_cfg.conn_id))
                 continue
 
-            if conn.current_ike_cfg.conn_id is None:
+            if conn.current_ike_cfg is None or conn.current_ike_cfg.conn_id is None:
                 dbg(LOG.PATHMON, '\tRESULT: skip: current_ike_cfg not set')
                 continue
 
