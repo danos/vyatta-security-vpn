@@ -189,6 +189,7 @@ Package: vyatta-ike-sa-daemon
 Architecture: any
 Conflicts: vyatta-ipsec-trapd (<< 0.0.16)
 Replaces: vyatta-ipsec-trapd (<< 0.0.16)
+Provides: vyatta-ipsec-trapd
 Depends:
   python3,
   python3-dbus,
