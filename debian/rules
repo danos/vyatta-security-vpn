@@ -24,11 +24,9 @@ override_dh_auto_test:
 override_dh_systemd_enable:
 	dh_systemd_enable --name=vyatta-ipsec-rekey
 	dh_systemd_enable --name=vyatta-ike-sa-daemon
-	dh_systemd_enable --name=vyatta-strongswan
 	dh_systemd_enable --name=vyatta-strongswan-starter
 
 override_dh_systemd_start:
 	dh_systemd_start --no-start --name=vyatta-ipsec-rekey
 	dh_systemd_start --no-start --name=vyatta-ike-sa-daemon
-	dh_systemd_start --no-start --name=vyatta-strongswan
 	dh_systemd_start --no-start --name=vyatta-strongswan-starter
