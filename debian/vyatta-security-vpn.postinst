@@ -11,8 +11,8 @@ set -e
 
 case "$1" in
     configure)
-        mv -f /lib/systemd/system/vyatta-strongswan.service /lib/systemd/system/strongswan.service
-        ln -s /lib/systemd/system/strongswan.service /lib/systemd/system/vyatta-strongswan.service 2> /dev/null || true
+        mv -f /lib/systemd/system/vyatta-strongswan-starter.service /lib/systemd/system/strongswan.service
+        ln -s /lib/systemd/system/strongswan.service /lib/systemd/system/vyatta-strongswan-starter.service 2> /dev/null || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

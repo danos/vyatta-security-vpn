@@ -1,0 +1,15 @@
+[Unit]
+Description=strongSwan IPsec IKEv1/IKEv2 daemon using ipsec.conf
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/charon.pid
+ExecStart=/usr/sbin/ipsec start
+ExecReload=/usr/sbin/ipsec reload
+StandardOutput=syslog
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
+Alias=vyatta-strongswan-starter.service
