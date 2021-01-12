@@ -43,7 +43,6 @@ Replaces: vyatta-cfg-vpn, vyatta-op-vpn, vyatta-op (<< 0.21)
 Provides: vyatta-security-vpn-ipsec-feature, ${diverted-files}
 Architecture: any
 Depends:
- charon-systemd (>= 5.7.2),
  chvrf,
  curl,
  iproute2 (>= 3.16.0),
