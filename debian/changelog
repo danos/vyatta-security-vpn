@@ -1,3 +1,10 @@
+vyatta-security-vpn (2.10) unstable; urgency=medium
+
+  * debian: use strongswan-starter for DANOS
+  * debian: no need for charon-systemd on DANOS
+
+ -- Daniel Gollub <dgollub@att.com>  Wed, 13 Jan 2021 11:40:06 +0100
+
 vyatta-security-vpn (2.9) unstable; urgency=medium
 
   * debian: ike-sa-daemonn provides now the SNMP traps
