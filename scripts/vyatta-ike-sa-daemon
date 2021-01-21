@@ -2644,12 +2644,6 @@ class Daemon:
         GLib.io_add_watch(snmp_cfg_notifier._fd, GLib.IO_IN, notifier_cb, snmp_cfg_notifier)
         GLib.io_add_watch(hostname_cfg_notifier._fd, GLib.IO_IN, notifier_cb, hostname_cfg_notifier)
 
-        mainloop = GLib.MainLoop()
-        try:
-            mainloop.run()
-        except (SystemExit, KeyboardInterrupt):
-            mainloop.quit()
-
 if __name__ == '__main__':
 
     syslog.openlog(DAEMON_NAME, facility=syslog.LOG_DAEMON)
