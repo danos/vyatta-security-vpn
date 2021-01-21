@@ -1660,8 +1660,25 @@ class Daemon:
         listener_thread = Thread(name='Listener', target=self._listen_func)
         listener_thread.start()
 
-        file_watcher_thread = Thread(name='FileWatcher', target=self._filewatcher_func)
-        file_watcher_thread.start()
+        # Setup file watchers
+        wm = pyinotify.WatchManager()
+        wm_hostname = pyinotify.WatchManager()
+        snmp_cfg_notifier = pyinotify.Notifier(wm, SNMPCfgHandler(self))
+        hostname_cfg_notifier = pyinotify.Notifier(wm_hostname, HostnameHandler(self))
+
+        # pylint: disable=no-member
+        mask = pyinotify.IN_CREATE | \
+                pyinotify.IN_DELETE | \
+                pyinotify.IN_MODIFY | \
+                pyinotify.IN_MOVED_FROM \
+                | pyinotify.IN_MOVED_TO
+
+        wm.add_watch(['/etc/snmp'], mask, rec=True)
+        wm_hostname.add_watch(['/etc/hostname'], mask, rec=True)
+
+        # pylint: disable=protected-access
+        GLib.io_add_watch(snmp_cfg_notifier._fd, GLib.IO_IN, notifier_cb, snmp_cfg_notifier)
+        GLib.io_add_watch(hostname_cfg_notifier._fd, GLib.IO_IN, notifier_cb, hostname_cfg_notifier)
 
         # notify systemd - initialized
         sdconn.notify("READY=1")
@@ -1679,8 +1696,6 @@ class Daemon:
 
             listener_thread.join()
             dbg(LOG.EVENT, 'Listner join complete')
-
-            file_watcher_thread.join()
 
             for n in range(self.num_worker_threads):
                 self.schedule(None, prio=JOB_PRIO_SHUTDOWN)
@@ -2619,30 +2634,6 @@ class Daemon:
         stats.update([('child_updown_refcount', self._child_updown_refcount)])
 
         return ppformat(stats)
-
-    def _filewatcher_func(self):
-
-        dbg(LOG.EVENT, 'FileWatcher Thread started')
-
-        # Setup file watchers
-        wm = pyinotify.WatchManager()
-        wm_hostname = pyinotify.WatchManager()
-        snmp_cfg_notifier = pyinotify.Notifier(wm, SNMPCfgHandler(self))
-        hostname_cfg_notifier = pyinotify.Notifier(wm_hostname, HostnameHandler(self))
-
-        # pylint: disable=no-member
-        mask = pyinotify.IN_CREATE | \
-                pyinotify.IN_DELETE | \
-                pyinotify.IN_MODIFY | \
-                pyinotify.IN_MOVED_FROM \
-                | pyinotify.IN_MOVED_TO
-
-        wm.add_watch(['/etc/snmp'], mask, rec=True)
-        wm_hostname.add_watch(['/etc/hostname'], mask, rec=True)
-
-        # pylint: disable=protected-access
-        GLib.io_add_watch(snmp_cfg_notifier._fd, GLib.IO_IN, notifier_cb, snmp_cfg_notifier)
-        GLib.io_add_watch(hostname_cfg_notifier._fd, GLib.IO_IN, notifier_cb, hostname_cfg_notifier)
 
 if __name__ == '__main__':
 
