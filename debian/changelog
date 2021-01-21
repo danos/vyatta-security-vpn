@@ -1,3 +1,10 @@
+vyatta-security-vpn (2.11) unstable; urgency=medium
+
+  * ike-sa-daemon: resolve mainloop conflict between D-Bus and pyinotify
+  * ike-sa-daemon: spawn separate mainloop for file-watcher thread
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 21 Jan 2021 08:22:13 +0100
+
 vyatta-security-vpn (2.10) unstable; urgency=medium
 
   * debian: use strongswan-starter for DANOS
