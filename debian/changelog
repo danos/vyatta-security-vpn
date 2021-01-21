@@ -1,3 +1,11 @@
+vyatta-security-vpn (2.12) unstable; urgency=medium
+
+  * Revert "ike-sa-daemon: spawn separate mainloop for file-watcher thread"
+  * Revert "ike-sa-daemon: resolve mainloop conflict between D-Bus and pyinotify"
+  * ike-sa-daemon: discontinue pyinotify usage
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 21 Jan 2021 15:42:44 +0100
+
 vyatta-security-vpn (2.11) unstable; urgency=medium
 
   * ike-sa-daemon: resolve mainloop conflict between D-Bus and pyinotify
