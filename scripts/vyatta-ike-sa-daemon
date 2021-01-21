@@ -34,7 +34,6 @@ import dbus.mainloop.glib
 import sdnotify
 import vici
 
-import pyinotify
 from pysnmp.error import PySnmpError
 from pysnmp.hlapi import SnmpEngine, CommunityData, \
                          Udp6TransportTarget, UdpTransportTarget, \
@@ -187,28 +186,6 @@ STATE_UP = 2
 def reload_snmp_cfg(config):
     config.read(SNMP_TRAP_CONFIG_PATH)
 
-class SNMPCfgHandler(pyinotify.ProcessEvent):
-    def __init__(self, daemon):
-        self.daemon = daemon
-        super().__init__()
-
-    def process_default(self, event):
-        if event.pathname != SNMP_TRAP_CONFIG_PATH:
-            return
-
-        reload_snmp_cfg(self.daemon.snmp_trap_config)
-
-class HostnameHandler(pyinotify.ProcessEvent):
-    def __init__(self, daemon):
-        self.daemon = daemon
-        super().__init__()
-
-    def process_default(self, event):
-        # don't use platform.node, inotify kicks
-        # in before the platform node name got updated.
-        with open('/etc/hostname') as f:
-            self.daemon.hostname = f.readline().rstrip('\n')
-
 def uptimeTicks():
     ticksHz = 100
     with open('/proc/uptime') as f:
@@ -222,9 +199,14 @@ def notifier_cb(source, condition, userdata):
         notifier.read_events()
         notifier.process_events()
 
-def send_child_sa_trap(up, ike_sa, child_sa, config, hostname):
+def send_child_sa_trap(up, ike_sa, child_sa):
 
     sys_descr = None
+
+    # check for update SNMP trap config and update hostname
+    hostname = platform.node()
+    config = configparser.ConfigParser()
+    config.read(SNMP_TRAP_CONFIG_PATH)
 
     # Check if SNMP is enabled/configured
     try:
@@ -1540,7 +1522,6 @@ class ReloadConfigJob(Job):
     def run(self, vs):
         del vs # unused
         self.daemon.read_config()
-        reload_snmp_cfg(self.daemon.snmp_trap_config)
 
         # notify systemd of readiness to accept more commands
         sdconn.notify("READY=1")
@@ -1595,9 +1576,6 @@ class Daemon:
 
         self.dbus_obj_pathmon = None
         self.system_bus = None
-
-        self.snmp_trap_config = configparser.ConfigParser()
-        self.hostname = platform.node()
 
         #
         # Threading
@@ -1659,26 +1637,6 @@ class Daemon:
         # VICI listener thread
         listener_thread = Thread(name='Listener', target=self._listen_func)
         listener_thread.start()
-
-        # Setup file watchers
-        wm = pyinotify.WatchManager()
-        wm_hostname = pyinotify.WatchManager()
-        snmp_cfg_notifier = pyinotify.Notifier(wm, SNMPCfgHandler(self))
-        hostname_cfg_notifier = pyinotify.Notifier(wm_hostname, HostnameHandler(self))
-
-        # pylint: disable=no-member
-        mask = pyinotify.IN_CREATE | \
-                pyinotify.IN_DELETE | \
-                pyinotify.IN_MODIFY | \
-                pyinotify.IN_MOVED_FROM \
-                | pyinotify.IN_MOVED_TO
-
-        wm.add_watch(['/etc/snmp'], mask, rec=True)
-        wm_hostname.add_watch(['/etc/hostname'], mask, rec=True)
-
-        # pylint: disable=protected-access
-        GLib.io_add_watch(snmp_cfg_notifier._fd, GLib.IO_IN, notifier_cb, snmp_cfg_notifier)
-        GLib.io_add_watch(hostname_cfg_notifier._fd, GLib.IO_IN, notifier_cb, hostname_cfg_notifier)
 
         # notify systemd - initialized
         sdconn.notify("READY=1")
@@ -2405,7 +2363,7 @@ class Daemon:
                 for child_conn_id, child_sa in child_sas.items():
 
                     ike_sa = values
-                    send_child_sa_trap(True, ike_sa, child_sa, self.snmp_trap_config, self.hostname)
+                    send_child_sa_trap(True, ike_sa, child_sa)
 
                     # strongswan 5.8.2 sends unique child SAs unames.
                     # strip the unique id away, since it breaks child config lookup.
@@ -2463,8 +2421,7 @@ class Daemon:
                 for child_conn_id, child_sa in child_sas.items():
 
                     ike_sa = values
-                    send_child_sa_trap(False, ike_sa, child_sa, self.snmp_trap_config,
-                                       self.hostname)
+                    send_child_sa_trap(False, ike_sa, child_sa)
 
                     # strongswan 5.8.2 sends unique child SAs unames.
                     # strip the unique id away, since it breaks child config lookup.
