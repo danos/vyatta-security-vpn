@@ -33,4 +33,8 @@ AC_PROG_CXX
 AM_PROG_AS
 AM_PROG_CC_C_O
 AC_PATH_PROG(PERL, perl)
+AC_PATH_PROGS(PYLINT, [pylint3 pylint], [no])
+if test "$PYLINT" = "no" ; then
+   AC_MSG_ERROR([pylint is required])
+fi
 AC_OUTPUT

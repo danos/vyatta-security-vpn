@@ -83,5 +83,5 @@ coverage:
 
 check:
 	perlcritic -5 .
-	pylint3 -d R,too-many-lines,invalid-name,missing-docstring \
+	$(PYLINT) -d R,too-many-lines,invalid-name,missing-docstring \
 		scripts/vyatta-ike-sa-daemon
