@@ -16,7 +16,6 @@ import re
 import sched
 import threading
 from threading import Event, Thread, RLock, Condition
-import _thread
 import time
 import traceback
 
@@ -40,6 +39,8 @@ from pysnmp.hlapi import SnmpEngine, CommunityData, \
                          Udp6TransportTarget, UdpTransportTarget, \
                          ContextData, NotificationType, sendNotification, \
                          ObjectIdentifier, ObjectIdentity, OctetString
+
+import _thread
 
 
 PP = None
