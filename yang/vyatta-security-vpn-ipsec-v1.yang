@@ -23,7 +23,7 @@ module vyatta-security-vpn-ipsec-v1 {
 		 Web: www.att.com";
 
 	description
-		"Copyright (c) 2017-2020 AT&T Intellectual Property.
+		"Copyright (c) 2017-2021 AT&T Intellectual Property.
 		 All rights reserved.
 
 		 Redistribution and use in source and binary forms, with or
@@ -57,6 +57,9 @@ module vyatta-security-vpn-ipsec-v1 {
 
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
+	revision 2021-07-28 {
+		description "Increase maximum IKE worker-threads to 128";
+	}
 	revision 2020-06-25 {
 		description "Correct contact details";
 	}
@@ -1644,7 +1647,7 @@ Example usage : 'aA1-&!@,.:_2Bb'
 					description "Configures the number of IKE control-plane worker threads.";
 					configd:help "Number of worker threads";
 					type uint32 {
-						range 10..32;
+						range 10..128;
 					}
 					default 16;
 				}
