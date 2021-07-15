@@ -40,7 +40,7 @@ from pysnmp.hlapi import SnmpEngine, CommunityData, \
                          ContextData, NotificationType, sendNotification, \
                          ObjectIdentifier, ObjectIdentity, OctetString
 
-import _thread
+import _thread # pylint: disable=C0411
 
 
 PP = None
