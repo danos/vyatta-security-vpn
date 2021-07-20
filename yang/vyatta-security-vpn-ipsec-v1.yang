@@ -58,7 +58,8 @@ module vyatta-security-vpn-ipsec-v1 {
 		 The YANG module for vyatta-security-vpn-ipsec-v1";
 
 	revision 2021-07-28 {
-		description "Increase maximum IKE worker-threads to 128";
+		description "Increase maximum IKE worker-threads to 128.
+			     Introduce IPsec log-modes none.";
 	}
 	revision 2020-06-25 {
 		description "Correct contact details";
@@ -464,6 +465,9 @@ Example usage : 'aA1-&!@,.:_2Bb'
 							}
 							enum "minimal" {
 								configd:help "Minimal logging which includes IKE/Child SA up/down logging and errors.";
+							}
+							enum "none" {
+								configd:help "No IKE control-plane logging, except for audit logging.";
 							}
 						}
 						ordered-by "user";
