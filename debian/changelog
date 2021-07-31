@@ -1,3 +1,19 @@
+vyatta-security-vpn (2.13) unstable; urgency=medium
+
+  [ Nicholas Brown ]
+  * configure.ac: check for appropriate pylint version
+  * change import order of _thread
+  * Revert "change import order of _thread"
+
+  [ Mike Manning ]
+  * Ignore pylint error
+
+  [ Daniel Gollub ]
+  * yang: bump worker-thread maximum to 128
+  * yang: introduce log-modes none
+
+ -- Daniel Gollub <dgollub@att.com>  Sat, 31 Jul 2021 19:09:41 +0200
+
 vyatta-security-vpn (2.12) unstable; urgency=medium
 
   * Revert "ike-sa-daemon: spawn separate mainloop for file-watcher thread"
