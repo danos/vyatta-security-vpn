@@ -1,3 +1,10 @@
+vyatta-security-vpn (2.14) unstable; urgency=medium
+
+  [ kalaivani vinothkumar ]
+  * Added must to restrict mtu if not default for IPv6
+
+ -- Daniel Gollub <dgollub@att.com>  Thu, 05 Aug 2021 10:59:32 +0200
+
 vyatta-security-vpn (2.13) unstable; urgency=medium
 
   [ Nicholas Brown ]
